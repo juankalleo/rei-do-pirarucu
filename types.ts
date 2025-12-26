@@ -35,6 +35,9 @@ export interface SaleEntry {
   paidAt?: string;
   paidAmount?: number;
   paymentHistory?: PaymentRecord[];
+  // Novos campos para controle de expedição (baixa)
+  isDispatched?: boolean;
+  dispatchedAt?: string;
 }
 
 export interface StockItem {
