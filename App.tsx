@@ -49,7 +49,7 @@ const BrandLogo = ({ variant = 'sidebar' }: { variant?: 'sidebar' | 'header' }) 
   );
 };
 
-const MonthlyBarChart = ({ data }: { data: { month: string, paid: number, pending: number }[] }) => {
+const MonthlyBarChart = ({ data, type = 'sales' }: { data: { month: string, val1: number, val2?: number }[], type?: 'sales' | 'purchases' }) => {
   if (data.length === 0) return (
     <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
       <ChartIcon className="w-12 h-12 opacity-10" />
@@ -62,9 +62,10 @@ const MonthlyBarChart = ({ data }: { data: { month: string, paid: number, pendin
   const padding = 60;
   const chartWidth = width - padding * 2;
   const chartHeight = height - padding * 2;
-  const maxVal = Math.max(...data.map(d => Math.max(d.paid, d.pending))) * 1.2 || 1000;
+  
+  const maxVal = Math.max(...data.map(d => Math.max(d.val1, d.val2 || 0))) * 1.2 || 1000;
   const groupWidth = chartWidth / data.length;
-  const barWidth = Math.min(groupWidth * 0.35, 30);
+  const barWidth = type === 'sales' ? Math.min(groupWidth * 0.35, 30) : Math.min(groupWidth * 0.6, 60);
 
   return (
     <div className="w-full h-full overflow-x-auto custom-scrollbar">
@@ -84,14 +85,24 @@ const MonthlyBarChart = ({ data }: { data: { month: string, paid: number, pendin
           })}
           {data.map((d, i) => {
             const xGroupCenter = padding + i * groupWidth + groupWidth / 2;
-            const hPaid = (d.paid / maxVal) * chartHeight;
-            const hPending = (d.pending / maxVal) * chartHeight;
+            const hVal1 = (d.val1 / maxVal) * chartHeight;
+            const hVal2 = d.val2 ? (d.val2 / maxVal) * chartHeight : 0;
+            
             return (
               <g key={d.month} className="group/bar">
-                <rect x={xGroupCenter - barWidth - 4} y={padding} width={barWidth} height={chartHeight} fill="#f8fafc" rx="4" />
-                <rect x={xGroupCenter + 4} y={padding} width={barWidth} height={chartHeight} fill="#f8fafc" rx="4" />
-                <rect x={xGroupCenter - barWidth - 4} y={height - padding - hPaid} width={barWidth} height={hPaid} fill="url(#gradPaid)" rx="4" className="transition-all duration-500 hover:brightness-110" />
-                <rect x={xGroupCenter + 4} y={height - padding - hPending} width={barWidth} height={hPending} fill="url(#gradPending)" rx="4" className="transition-all duration-500 hover:brightness-110" />
+                {type === 'sales' ? (
+                  <>
+                    <rect x={xGroupCenter - barWidth - 4} y={padding} width={barWidth} height={chartHeight} fill="#f8fafc" rx="4" />
+                    <rect x={xGroupCenter + 4} y={padding} width={barWidth} height={chartHeight} fill="#f8fafc" rx="4" />
+                    <rect x={xGroupCenter - barWidth - 4} y={height - padding - hVal1} width={barWidth} height={hVal1} fill="url(#gradPaid)" rx="4" className="transition-all duration-500 hover:brightness-110" />
+                    <rect x={xGroupCenter + 4} y={height - padding - hVal2} width={barWidth} height={hVal2} fill="url(#gradPending)" rx="4" className="transition-all duration-500 hover:brightness-110" />
+                  </>
+                ) : (
+                  <>
+                    <rect x={xGroupCenter - barWidth / 2} y={padding} width={barWidth} height={chartHeight} fill="#f8fafc" rx="4" />
+                    <rect x={xGroupCenter - barWidth / 2} y={height - padding - hVal1} width={barWidth} height={hVal1} fill="url(#gradPurchases)" rx="4" className="transition-all duration-500 hover:brightness-110" />
+                  </>
+                )}
                 <text x={xGroupCenter} y={height - padding + 25} textAnchor="middle" className="text-[11px] font-black fill-slate-500 uppercase tracking-tighter">{d.month}</text>
               </g>
             );
@@ -99,6 +110,7 @@ const MonthlyBarChart = ({ data }: { data: { month: string, paid: number, pendin
           <defs>
             <linearGradient id="gradPaid" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#059669" /></linearGradient>
             <linearGradient id="gradPending" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" /><stop offset="100%" stopColor="#d97706" /></linearGradient>
+            <linearGradient id="gradPurchases" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" /><stop offset="100%" stopColor="#b91c1c" /></linearGradient>
           </defs>
         </svg>
       </div>
@@ -110,17 +122,17 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('pescados_vendas_data_v15');
+    const saved = localStorage.getItem('pescados_vendas_data_v17');
     if (saved) return JSON.parse(saved);
     return INITIAL_CUSTOMERS.map(c => ({ ...c, priceList: c.priceList || {} }));
   });
   const [stock, setStock] = useState<StockItem[]>(() => {
-    const saved = localStorage.getItem('pescados_estoque_data_v15');
+    const saved = localStorage.getItem('pescados_estoque_data_v17');
     if (saved) return JSON.parse(saved);
     return PRODUCT_SUGGESTIONS.map(p => ({ productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString() }));
   });
   const [purchases, setPurchases] = useState<PurchaseEntry[]>(() => {
-    const saved = localStorage.getItem('pescados_compras_data_v15');
+    const saved = localStorage.getItem('pescados_compras_data_v17');
     if (saved) return JSON.parse(saved);
     return [];
   });
@@ -143,9 +155,9 @@ const App: React.FC = () => {
   const [customerForm, setCustomerForm] = useState<Partial<Customer>>({ name: '', taxId: '', address: '', contactPerson: '', phone: '', priceList: {} });
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
 
-  useEffect(() => localStorage.setItem('pescados_vendas_data_v15', JSON.stringify(customers)), [customers]);
-  useEffect(() => localStorage.setItem('pescados_estoque_data_v15', JSON.stringify(stock)), [stock]);
-  useEffect(() => localStorage.setItem('pescados_compras_data_v15', JSON.stringify(purchases)), [purchases]);
+  useEffect(() => localStorage.setItem('pescados_vendas_data_v17', JSON.stringify(customers)), [customers]);
+  useEffect(() => localStorage.setItem('pescados_estoque_data_v17', JSON.stringify(stock)), [stock]);
+  useEffect(() => localStorage.setItem('pescados_compras_data_v17', JSON.stringify(purchases)), [purchases]);
 
   useEffect(() => {
     if (isVendaModalOpen && activeCustomerId && formData.productName) {
@@ -188,21 +200,36 @@ const App: React.FC = () => {
   }, [customers, stock, purchases]);
 
   const timelineMonthlyData = useMemo(() => {
-    const monthly: Record<string, { paid: number, pending: number }> = {};
+    const monthly: Record<string, { val1: number, val2: number }> = {};
     customers.forEach(c => c.entries.forEach(e => {
       const date = new Date(e.date);
       const monthKey = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).toUpperCase();
       const sortKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const key = `${sortKey}|${monthKey}`;
-      if (!monthly[key]) monthly[key] = { paid: 0, pending: 0 };
+      if (!monthly[key]) monthly[key] = { val1: 0, val2: 0 };
       const currentPaid = e.isPaid ? e.total : (e.paidAmount || 0);
-      monthly[key].paid += currentPaid;
-      monthly[key].pending += (e.total - currentPaid);
+      monthly[key].val1 += currentPaid;
+      monthly[key].val2 += (e.total - currentPaid);
     }));
     return Object.entries(monthly)
       .map(([key, vals]) => ({ sortKey: key.split('|')[0], month: key.split('|')[1], ...vals }))
       .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [customers]);
+
+  const timelineMonthlyPurchasesData = useMemo(() => {
+    const monthly: Record<string, { val1: number }> = {};
+    purchases.forEach(p => {
+      const date = new Date(p.date);
+      const monthKey = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).toUpperCase();
+      const sortKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const key = `${sortKey}|${monthKey}`;
+      if (!monthly[key]) monthly[key] = { val1: 0 };
+      monthly[key].val1 += p.total;
+    });
+    return Object.entries(monthly)
+      .map(([key, vals]) => ({ sortKey: key.split('|')[0], month: key.split('|')[1], ...vals }))
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [purchases]);
 
   const reportData = useMemo(() => {
     const prodStats: Record<string, { weight: number, revenue: number }> = {};
@@ -253,7 +280,13 @@ const App: React.FC = () => {
         entries: c.entries.map(e => {
           if (e.id !== entryId) return e;
           const newIsPaid = !e.isPaid;
-          return { ...e, isPaid: newIsPaid, paidAmount: newIsPaid ? e.total : 0 };
+          const today = new Date().toISOString().split('T')[0];
+          return { 
+            ...e, 
+            isPaid: newIsPaid, 
+            paidAmount: newIsPaid ? e.total : 0,
+            paidAt: newIsPaid ? today : undefined
+          };
         })
       };
     }));
@@ -278,6 +311,7 @@ const App: React.FC = () => {
             ...ent,
             paidAmount: currentPaid,
             isPaid,
+            paidAt: isPaid ? date : ent.paidAt,
             paymentHistory: [...history, { amount, date }]
           };
         })
@@ -322,7 +356,7 @@ const App: React.FC = () => {
     });
 
     setIsVendaModalOpen(false);
-    setFormData({ ...formData, productName: '', pricePerKg: '', weightKg: '' });
+    setFormData({ ...formData, productName: '', pricePerKg: '', weightKg: '', date: new Date().toISOString().split('T')[0] });
   };
 
   const handleSavePurchase = (e: React.FormEvent) => {
@@ -343,9 +377,6 @@ const App: React.FC = () => {
     };
 
     setPurchases(prev => [newPurchase, ...prev]);
-
-    // O controle de compras agora não altera o inventário.
-    // O usuário gerencia o estoque separadamente pela aba Inventário.
 
     setIsPurchaseModalOpen(false);
     setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
@@ -443,8 +474,10 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4 md:gap-8">
             <div className="hidden md:block h-10 w-px bg-slate-100"></div>
             <div className="text-right">
-              <p className="text-[8px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Total Compras</p>
-              <p className="text-lg md:text-2xl font-black text-red-600 leading-none">{formatCurrency(stats.totalSpent)}</p>
+              <p className="text-[8px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Saldo Líquido</p>
+              <p className={`text-lg md:text-2xl font-black leading-none ${stats.totalPaid - stats.totalSpent >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {formatCurrency(stats.totalPaid - stats.totalSpent)}
+              </p>
             </div>
           </div>
         </header>
@@ -478,8 +511,8 @@ const App: React.FC = () => {
               <div className="bg-white rounded-[2rem] md:rounded-[3.5rem] border border-slate-100 p-6 md:p-12 shadow-sm flex flex-col items-center">
                 <div className="w-full flex flex-col md:flex-row justify-between items-center mb-8 md:mb-16 gap-4 text-center md:text-left">
                   <div>
-                    <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-slate-800 italic font-serif">Performance Financeira</h3>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Fluxo de Caixa por Mês</p>
+                    <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-slate-800 italic font-serif">Fluxo de Vendas Mensal</h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Realizado vs A Receber</p>
                   </div>
                 </div>
                 <div className="w-full h-[300px] md:h-[500px]"><MonthlyBarChart data={timelineMonthlyData} /></div>
@@ -618,6 +651,23 @@ const App: React.FC = () => {
                   <div className="text-center md:text-left"><h3 className="text-2xl md:text-3xl font-black uppercase tracking-tighter italic font-serif leading-none">Auditoria Financeira</h3><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Relatórios Consolidados</p></div>
                   <button onClick={() => window.print()} className="w-full md:w-auto px-8 py-4 bg-[#002855] text-white rounded-xl flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-xl">Imprimir Relatório</button>
                </div>
+
+               {/* Seção de Gráficos Mensais */}
+               <div className="grid grid-cols-1 gap-8 md:gap-12">
+                  <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm">
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Fluxo de Compras Mensal</h3>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Investimento em Mercadoria</p>
+                      </div>
+                      <div className="px-6 py-2 bg-red-50 rounded-full border border-red-100">
+                        <span className="text-[10px] font-black text-red-700 uppercase">Total Gasto: {formatCurrency(stats.totalSpent)}</span>
+                      </div>
+                    </div>
+                    <div className="h-[300px]"><MonthlyBarChart data={timelineMonthlyPurchasesData} type="purchases" /></div>
+                  </div>
+               </div>
+
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
                   <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm">
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-10">Faturamento por Produto</h3>
@@ -656,6 +706,7 @@ const App: React.FC = () => {
                 <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Peso (Kg)</label><input type="number" step="0.001" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-[#002855] text-center focus:border-[#002855] outline-none" value={purchaseFormData.weightKg} onChange={e => setPurchaseFormData({ ...purchaseFormData, weightKg: e.target.value })} /></div>
                 <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Valor Total (R$)</label><input type="number" step="0.01" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-red-600 text-center focus:border-[#002855] outline-none" placeholder="0,00" value={purchaseFormData.total} onChange={e => setPurchaseFormData({ ...purchaseFormData, total: e.target.value })} /></div>
               </div>
+              <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Data da Compra</label><input type="date" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-lg font-black text-slate-600 outline-none focus:border-[#002855]" value={purchaseFormData.date} onChange={e => setPurchaseFormData({ ...purchaseFormData, date: e.target.value })} /></div>
               <p className="text-[8px] font-bold text-slate-400 uppercase text-center mt-2">* Compras não afetam o inventário físico automaticamente.</p>
               <button type="submit" className="w-full bg-[#002855] text-white font-black py-5 rounded-xl shadow-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all border border-yellow-500/20">REGISTRAR GASTO</button>
             </form>
@@ -663,7 +714,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL CLIENTE */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden my-auto animate-in zoom-in border-4 border-yellow-500/10">
@@ -720,7 +770,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* RESTO DOS MODAIS MANTIDOS */}
       {isVendaModalOpen && (
         <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-in slide-in-from-top-10 border-4 border-yellow-500/10">
@@ -740,6 +789,10 @@ const App: React.FC = () => {
                   <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 text-center">Peso (Kg)</label>
                   <input type="number" step="0.001" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-center focus:border-[#002855] outline-none" value={formData.weightKg} onChange={e => setFormData({ ...formData, weightKg: e.target.value })} />
                 </div>
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Data da Venda</label>
+                <input type="date" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-lg font-black text-slate-600 outline-none focus:border-[#002855]" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
               </div>
               <button type="submit" className="w-full bg-[#002855] text-white font-black py-5 rounded-xl shadow-lg uppercase tracking-widest text-[10px] active:scale-95 transition-all border border-yellow-500/20">REGISTRAR VENDA</button>
             </form>
@@ -763,28 +816,19 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {isEditStockModalOpen && (
-        <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in border-4 border-yellow-500/10">
-            <div className="bg-[#002855] p-8 text-white flex justify-between items-center border-b border-yellow-500/20"><h3 className="text-xl font-black uppercase tracking-tighter italic font-serif">Ajustar Inventário</h3><button onClick={() => setIsEditStockModalOpen(false)} className="text-2xl hover:text-yellow-400">✕</button></div>
-            <form onSubmit={handleUpdateStockItem} className="p-8 space-y-6">
-              <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Nome do Produto</label><input required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 uppercase font-black text-lg outline-none focus:border-[#002855]" value={editStockFormData.newName} onChange={e => setEditStockFormData({ ...editStockFormData, newName: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Peso Real (Kg)</label><input type="number" step="0.001" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-[#002855] text-center outline-none focus:border-[#002855]" value={editStockFormData.weight} onChange={e => setEditStockFormData({ ...editStockFormData, weight: e.target.value })} /></div>
-                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Preço Base (R$/Kg)</label><input type="number" step="0.01" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-emerald-600 text-center outline-none focus:border-[#002855]" value={editStockFormData.basePrice} onChange={e => setEditStockFormData({ ...editStockFormData, basePrice: e.target.value })} /></div>
-              </div>
-              <button type="submit" className="w-full bg-[#002855] text-white font-black py-5 rounded-xl shadow-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all border border-yellow-500/20">SALVAR AJUSTE</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {isPartialPaymentModalOpen && (
         <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4">
           <div className="bg-amber-600 rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in border-4 border-white/20">
             <div className="bg-amber-700 p-8 text-white flex justify-between items-center"><h3 className="text-xl font-black uppercase tracking-tighter italic font-serif">Receber Valor</h3><button onClick={() => setIsPartialPaymentModalOpen(false)} className="text-2xl hover:text-amber-100">✕</button></div>
             <form onSubmit={handlePartialPayment} className="p-6 md:p-10 space-y-6">
-              <input type="number" step="0.01" autoFocus required className="w-full border-2 border-amber-500/30 bg-white rounded-xl p-8 font-mono text-4xl font-black text-amber-700 text-center focus:border-white outline-none" placeholder="0,00" value={partialPaymentData.amount} onChange={e => setPartialPaymentData({ ...partialPaymentData, amount: e.target.value })} />
+              <div>
+                <label className="block text-[9px] font-black text-white/80 uppercase mb-2">Valor Recebido (R$)</label>
+                <input type="number" step="0.01" autoFocus required className="w-full border-2 border-amber-500/30 bg-white rounded-xl p-6 font-mono text-4xl font-black text-amber-700 text-center focus:border-white outline-none" placeholder="0,00" value={partialPaymentData.amount} onChange={e => setPartialPaymentData({ ...partialPaymentData, amount: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-white/80 uppercase mb-2">Data do Pagamento</label>
+                <input type="date" required className="w-full border-2 border-amber-500/30 bg-white rounded-xl p-5 font-mono text-lg font-black text-amber-900 outline-none focus:border-white" value={partialPaymentData.date} onChange={e => setPartialPaymentData({ ...partialPaymentData, date: e.target.value })} />
+              </div>
               <button type="submit" className="w-full bg-white text-amber-700 font-black py-5 rounded-xl shadow-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">CONFIRMAR BAIXA</button>
             </form>
           </div>

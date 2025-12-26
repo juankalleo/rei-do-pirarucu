@@ -24,6 +24,7 @@ export interface SaleEntry {
   total: number;
   date: string;
   isPaid: boolean;
+  paidAt?: string;
   paidAmount?: number;
   paymentHistory?: PaymentRecord[];
 }

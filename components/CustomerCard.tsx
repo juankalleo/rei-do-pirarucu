@@ -95,7 +95,14 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
                         )}
                         <div className="truncate">
                           <p className="text-[9px] md:text-[10px] font-black text-slate-700 uppercase leading-none truncate">{entry.productName}</p>
-                          <p className="text-[7px] md:text-[8px] font-bold text-slate-400 mt-1">{entry.weightKg}Kg • {new Date(entry.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</p>
+                          <p className="text-[7px] md:text-[8px] font-bold text-slate-400 mt-1">
+                            {entry.weightKg}Kg • {new Date(entry.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                            {isFull && entry.paidAt && (
+                              <span className="text-emerald-600 ml-1">
+                                (PG em {new Date(entry.paidAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
                     </td>
