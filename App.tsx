@@ -232,14 +232,32 @@ const App: React.FC = () => {
   }, [purchases]);
 
   const reportData = useMemo(() => {
-    const prodStats: Record<string, { weight: number, revenue: number }> = {};
+    const prodStats: Record<string, { weight: number, revenue: number, cost: number }> = {};
     customers.forEach(c => c.entries.forEach(e => {
       const pName = e.productName.toUpperCase();
-      if (!prodStats[pName]) prodStats[pName] = { weight: 0, revenue: 0 };
+      if (!prodStats[pName]) prodStats[pName] = { weight: 0, revenue: 0, cost: 0 };
       prodStats[pName].weight += Number(e.weightKg);
       prodStats[pName].revenue += Number(e.total);
+      
+      // Busca custo médio no estoque ou compras
+      const sItem = stock.find(s => s.productName === pName);
+      if (sItem) {
+        prodStats[pName].cost += Number(e.weightKg) * (sItem.basePricePerKg || 0);
+      }
     }));
     return Object.entries(prodStats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.revenue - a.revenue);
+  }, [customers, stock]);
+
+  const rankingInadimplencia = useMemo(() => {
+    const list = customers.map(c => {
+      let pending = 0;
+      c.entries.forEach(e => {
+        const currentPaid = e.isPaid ? e.total : (e.paidAmount || 0);
+        pending += (e.total - currentPaid);
+      });
+      return { name: c.name, pending };
+    }).filter(c => c.pending > 0);
+    return list.sort((a, b) => b.pending - a.pending);
   }, [customers]);
 
   const rankingClientes = useMemo(() => {
@@ -423,6 +441,14 @@ const App: React.FC = () => {
     const oldName = editStockFormData.oldName;
     setStock(prev => prev.map(s => s.productName === oldName ? { ...s, productName: newName, availableWeight: newWeight, basePricePerKg: newPrice, lastUpdate: new Date().toISOString() } : s));
     setIsEditStockModalOpen(false);
+  };
+
+  const handleExportPDF = () => {
+    const originalTitle = document.title;
+    const dateStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    document.title = `Auditoria_Financeira_Rei_do_Pirarucu_${dateStr}`;
+    window.print();
+    document.title = originalTitle;
   };
 
   const NavItem = ({ id, label, icon: Icon }: { id: ViewType, label: string, icon: any }) => (
@@ -646,48 +672,148 @@ const App: React.FC = () => {
           )}
 
           {activeView === 'reports' && (
-            <div className="max-w-[1400px] mx-auto space-y-8 md:space-y-12 animate-in slide-in-from-right-10">
+            <div className="max-w-[1400px] mx-auto space-y-8 md:space-y-12 animate-in slide-in-from-right-10 print:bg-white print-padding">
+               {/* Cabeçalho do Relatório Consolidado */}
                <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
-                  <div className="text-center md:text-left"><h3 className="text-2xl md:text-3xl font-black uppercase tracking-tighter italic font-serif leading-none">Auditoria Financeira</h3><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Relatórios Consolidados</p></div>
-                  <button onClick={() => window.print()} className="w-full md:w-auto px-8 py-4 bg-[#002855] text-white rounded-xl flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-xl">Imprimir Relatório</button>
+                  <div className="text-center md:text-left">
+                    <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tighter italic font-serif leading-none">Relatório Consolidado</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Status Geral do Sistema - {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <button onClick={handleExportPDF} className="w-full md:w-auto px-8 py-4 bg-[#002855] text-white rounded-xl flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-xl print:hidden">Exportar PDF</button>
                </div>
 
-               {/* Seção de Gráficos Mensais */}
-               <div className="grid grid-cols-1 gap-8 md:gap-12">
-                  <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-                      <div>
-                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Fluxo de Compras Mensal</h3>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Investimento em Mercadoria</p>
+               {/* Análise de Capital de Giro e Liquidez */}
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="bg-white p-8 rounded-[2rem] border shadow-sm col-span-1 lg:col-span-2">
+                    <h4 className="text-[11px] font-black text-[#002855] uppercase tracking-widest mb-8 border-b pb-4">Indicadores de Liquidez Financeira</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div className="p-6 bg-slate-50 rounded-2xl">
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-2">Vendas Totais (A)</p>
+                        <p className="text-xl font-black text-slate-900">{formatCurrency(stats.totalRevenue)}</p>
+                        <p className="text-[9px] font-bold text-slate-400 mt-2">Volume Bruto Negociado</p>
                       </div>
-                      <div className="px-6 py-2 bg-red-50 rounded-full border border-red-100">
-                        <span className="text-[10px] font-black text-red-700 uppercase">Total Gasto: {formatCurrency(stats.totalSpent)}</span>
+                      <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100">
+                        <p className="text-[8px] font-black text-emerald-600 uppercase mb-2">Realizado em Caixa (B)</p>
+                        <p className="text-xl font-black text-emerald-700">{formatCurrency(stats.totalPaid)}</p>
+                        <p className="text-[9px] font-bold text-emerald-500 mt-2">{((stats.totalPaid / stats.totalRevenue) * 100 || 0).toFixed(1)}% de Conversão</p>
+                      </div>
+                      <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100">
+                        <p className="text-[8px] font-black text-amber-600 uppercase mb-2">Pendente Clientes (C)</p>
+                        <p className="text-xl font-black text-amber-700">{formatCurrency(stats.totalPending)}</p>
+                        <p className="text-[9px] font-bold text-amber-500 mt-2">Capital em Risco</p>
                       </div>
                     </div>
-                    <div className="h-[300px]"><MonthlyBarChart data={timelineMonthlyPurchasesData} type="purchases" /></div>
+                    <div className="mt-8 p-6 bg-[#002855] rounded-3xl text-white">
+                       <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-[9px] font-black uppercase text-blue-200">Resultado Líquido (B - Compras)</p>
+                            <h3 className="text-3xl font-black tracking-tighter mt-1">{formatCurrency(stats.totalPaid - stats.totalSpent)}</h3>
+                          </div>
+                          <div className="text-right">
+                            <span className={`px-4 py-2 rounded-full text-[10px] font-black uppercase ${stats.totalPaid - stats.totalSpent >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                              {stats.totalPaid - stats.totalSpent >= 0 ? 'Operação Saudável' : 'Atenção ao Caixa'}
+                            </span>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-[2rem] border shadow-sm">
+                    <h4 className="text-[11px] font-black text-[#002855] uppercase tracking-widest mb-8 border-b pb-4">Imobilizado em Peixe</h4>
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-end">
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Estoque Físico</p>
+                        <p className="text-lg font-black">{stats.totalInStock.toFixed(1)} <span className="text-[10px] text-slate-300">KG</span></p>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Vlr. Patrimonial</p>
+                        <p className="text-lg font-black text-[#002855]">{formatCurrency(stats.totalInventoryValue)}</p>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden mt-4">
+                        <div className="h-full bg-yellow-500" style={{ width: '65%' }}></div>
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-400 italic">O valor de estoque representa o custo de reposição baseado no preço base cadastrado.</p>
+                    </div>
                   </div>
                </div>
 
-               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
-                  <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm">
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-10">Faturamento por Produto</h3>
-                    <div className="space-y-8">{reportData.map(p => (
-                      <div key={p.name} className="flex flex-col gap-3">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-800 flex-1 truncate mr-4">{p.name}</span><span className="text-[10px] font-black text-emerald-600 font-mono whitespace-nowrap">{formatCurrency(p.revenue)}</span></div>
-                        <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-[#002855] rounded-full" style={{ width: `${(p.revenue / (reportData[0]?.revenue || 1)) * 100}%` }}></div></div>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase text-right">{p.weight.toFixed(1)}kg Vendidos</p>
-                      </div>
-                    ))}</div>
+               {/* Análise ABC de Vendas e Margem Estimada */}
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="bg-white rounded-[2rem] p-8 border shadow-sm">
+                    <h4 className="text-[11px] font-black text-[#002855] uppercase tracking-widest mb-8 border-b pb-4">Performance Analítica por Produto</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b">
+                            <th className="pb-4">Produto</th>
+                            <th className="pb-4 text-right">Volume</th>
+                            <th className="pb-4 text-right">Faturamento</th>
+                            <th className="pb-4 text-right">Lucro Est.</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {reportData.map(p => {
+                            const margin = p.revenue - p.cost;
+                            return (
+                              <tr key={p.name} className="hover:bg-slate-50 transition-colors group">
+                                <td className="py-4 text-[10px] font-black text-slate-700 uppercase">{p.name}</td>
+                                <td className="py-4 text-[10px] font-black text-slate-500 text-right">{p.weight.toFixed(1)}kg</td>
+                                <td className="py-4 text-[10px] font-black text-slate-900 text-right font-mono">{formatCurrency(p.revenue)}</td>
+                                <td className="py-4 text-right">
+                                  <span className={`text-[10px] font-black font-mono ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {formatCurrency(margin)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                  <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm">
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-10">Ranking de Receita</h3>
-                    <div className="space-y-3">{rankingClientes.map((c, i) => (
-                        <div key={c.name} className="flex items-center justify-between p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 rounded-2xl transition-all">
-                          <div className="flex items-center gap-4 truncate"><span className={`text-[10px] font-black w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${i < 3 ? 'bg-yellow-100 text-yellow-700 font-serif' : 'bg-slate-50 text-slate-400'}`}>{i+1}</span><span className="text-[11px] font-black uppercase text-slate-700 truncate">{c.name}</span></div>
-                          <div className="text-right whitespace-nowrap ml-4"><span className="text-[11px] font-black text-slate-900 font-mono block">{formatCurrency(c.total)}</span>{c.pending > 0 && <span className="text-[8px] font-bold text-amber-500 uppercase">A receber: {formatCurrency(c.pending)}</span>}</div>
+
+                  <div className="bg-white rounded-[2rem] p-8 border shadow-sm">
+                    <h4 className="text-[11px] font-black text-[#002855] uppercase tracking-widest mb-8 border-b pb-4">Concentração de Risco de Crédito</h4>
+                    <div className="space-y-4">
+                      {rankingInadimplencia.length > 0 ? rankingInadimplencia.map((c, i) => (
+                        <div key={c.name} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                          <div className="flex items-center gap-4">
+                            <span className="text-[10px] font-black bg-white w-8 h-8 rounded-lg flex items-center justify-center text-red-500 shadow-sm">{i+1}</span>
+                            <span className="text-[10px] font-black uppercase text-slate-700">{c.name}</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[11px] font-black text-red-600 font-mono">{formatCurrency(c.pending)}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Débito em Aberto</p>
+                          </div>
                         </div>
-                      ))}</div>
+                      )) : (
+                        <div className="p-20 text-center">
+                          <CheckIcon className="w-12 h-12 text-emerald-500 mx-auto mb-4 opacity-20" />
+                          <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Inadimplência Zero!</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
+               </div>
+
+               {/* Relatório Histórico de Compras vs Vendas */}
+               <div className="bg-white rounded-[2rem] p-8 md:p-12 border shadow-sm">
+                 <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                    <div>
+                      <h4 className="text-[11px] font-black text-[#002855] uppercase tracking-widest">Comparativo de Fluxo Financeiro</h4>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Investimento em Compras Mensais</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full"></div><span className="text-[9px] font-black uppercase text-slate-400">Total Compras: {formatCurrency(stats.totalSpent)}</span></div>
+                    </div>
+                 </div>
+                 <div className="h-[300px]"><MonthlyBarChart data={timelineMonthlyPurchasesData} type="purchases" /></div>
+               </div>
+
+               {/* Nota de Auditoria */}
+               <div className="p-8 text-center border-t border-slate-100 opacity-50">
+                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Este relatório é gerado automaticamente com base nos lançamentos manuais do sistema.</p>
+                 <p className="text-[8px] text-slate-300 mt-2 font-mono">ID Relatório: {Math.random().toString(36).substr(2, 12).toUpperCase()}</p>
                </div>
             </div>
           )}
