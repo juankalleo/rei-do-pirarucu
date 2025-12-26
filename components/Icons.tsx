@@ -2,12 +2,22 @@
 import React from 'react';
 
 export const FishIcon = ({ className }: { className?: string }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M19.722 15.336c.211.044.425.064.64.064a3 3 0 0 0 0-6 3.92 3.92 0 0 0-.64.064c-.113-1.428-.54-2.812-1.246-4.063a.5.5 0 0 0-.872.482c.624 1.107 1.002 2.33 1.11 3.585l-11.3 5.42a2.007 2.007 0 1 0 2.508 2.508l5.42-11.3c1.255.108 2.478.486 3.585 1.11a.5.5 0 0 0 .482-.872c-1.25-.706-2.635-1.133-4.063-1.246A3.92 3.92 0 0 0 15.4 4a3 3 0 0 0-6 0c0 .215.02.429.064.64-1.251.108-2.474.481-3.581 1.104a.5.5 0 0 0 .482.872c1.25-.706 2.635-1.133 4.063-1.246" />
-    <path d="M11 11 3 3" />
-    <path d="m21 21-1.68-1.68" />
-    <path d="M3 21c.603-1.81 2.39-3.393 4.394-4.394" />
-    <path d="M21 3c-1.81.603-3.393 2.39-4.394 4.394" />
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {/* Corpo alongado do Pirarucu */}
+    <path 
+      d="M5 20 C 15 12, 35 10, 60 10 C 85 10, 95 15, 95 20 C 95 25, 85 30, 60 30 C 35 30, 15 28, 5 20 Z" 
+      fill="currentColor" 
+      fillOpacity="0.2" 
+    />
+    {/* Nadadeiras características perto da cauda */}
+    <path d="M75 10 Q 82 2, 90 12" fill="none" strokeWidth="1.5" />
+    <path d="M75 30 Q 82 38, 90 28" fill="none" strokeWidth="1.5" />
+    {/* Olho */}
+    <circle cx="15" cy="18" r="1.5" fill="currentColor" />
+    {/* Detalhe da Guelra */}
+    <path d="M22 15 Q 25 20, 22 25" fill="none" strokeWidth="1" />
+    {/* Linha lateral */}
+    <path d="M30 20 H 80" strokeDasharray="2 4" strokeWidth="0.5" />
   </svg>
 );
 

@@ -1,6 +1,11 @@
 
 export type ViewType = 'dashboard' | 'inventory' | 'customers' | 'reports';
 
+export interface PaymentRecord {
+  date: string;
+  amount: number;
+}
+
 export interface SaleEntry {
   id: string;
   productName: string;
@@ -9,11 +14,14 @@ export interface SaleEntry {
   total: number;
   date: string;
   isPaid: boolean;
+  paidAmount?: number; // Valor efetivamente pago até o momento
+  paymentHistory?: PaymentRecord[]; // Histórico de quando os pagamentos foram feitos
 }
 
 export interface StockItem {
   productName: string;
   availableWeight: number;
+  basePricePerKg: number; // Preço sugerido de venda para cálculo de valor em estoque
   lastUpdate: string;
 }
 
@@ -34,5 +42,6 @@ export interface GlobalStats {
   totalPaid: number;
   totalPending: number;
   totalInStock: number;
+  totalInventoryValue: number; // Novo campo: Valor em R$ do estoque total
   customerCount: number;
 }
