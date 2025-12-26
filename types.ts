@@ -16,6 +16,14 @@ export interface PurchaseEntry {
   supplier?: string;
 }
 
+export interface StockMovement {
+  id: string;
+  type: 'entry' | 'exit' | 'adjustment';
+  weight: number;
+  date: string;
+  description: string;
+}
+
 export interface SaleEntry {
   id: string;
   productName: string;
@@ -34,6 +42,7 @@ export interface StockItem {
   availableWeight: number;
   basePricePerKg: number;
   lastUpdate: string;
+  history?: StockMovement[];
 }
 
 export interface Customer {
