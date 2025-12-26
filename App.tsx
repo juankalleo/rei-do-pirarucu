@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Customer, SaleEntry, StockItem, ViewType, PaymentRecord } from './types';
+import { Customer, SaleEntry, StockItem, ViewType, PaymentRecord, PurchaseEntry } from './types';
 import { INITIAL_CUSTOMERS, PRODUCT_SUGGESTIONS } from './constants';
 import { 
   FishIcon, 
@@ -12,7 +12,8 @@ import {
   LayoutIcon, 
   UsersIcon,
   TrashIcon,
-  EditIcon
+  EditIcon,
+  ShoppingIcon
 } from './components/Icons';
 import CustomerCard from './components/CustomerCard';
 
@@ -109,14 +110,19 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('pescados_vendas_data_v13');
+    const saved = localStorage.getItem('pescados_vendas_data_v15');
     if (saved) return JSON.parse(saved);
     return INITIAL_CUSTOMERS.map(c => ({ ...c, priceList: c.priceList || {} }));
   });
   const [stock, setStock] = useState<StockItem[]>(() => {
-    const saved = localStorage.getItem('pescados_estoque_data_v13');
+    const saved = localStorage.getItem('pescados_estoque_data_v15');
     if (saved) return JSON.parse(saved);
     return PRODUCT_SUGGESTIONS.map(p => ({ productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString() }));
+  });
+  const [purchases, setPurchases] = useState<PurchaseEntry[]>(() => {
+    const saved = localStorage.getItem('pescados_compras_data_v15');
+    if (saved) return JSON.parse(saved);
+    return [];
   });
 
   const [isVendaModalOpen, setIsVendaModalOpen] = useState(false);
@@ -124,21 +130,23 @@ const App: React.FC = () => {
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [isEditStockModalOpen, setIsEditStockModalOpen] = useState(false);
   const [isPartialPaymentModalOpen, setIsPartialPaymentModalOpen] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   
   const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null);
   const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({ productName: '', pricePerKg: '', weightKg: '', date: new Date().toISOString().split('T')[0], isPaid: false });
   const [stockFormData, setStockFormData] = useState({ productName: '', weightToAdd: '', basePricePerKg: '', date: new Date().toISOString().split('T')[0] });
+  const [purchaseFormData, setPurchaseFormData] = useState({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   const [editStockFormData, setEditStockFormData] = useState({ oldName: '', newName: '', weight: '', basePrice: '' });
   const [partialPaymentData, setPartialPaymentData] = useState({ amount: '', date: new Date().toISOString().split('T')[0] });
   const [customerForm, setCustomerForm] = useState<Partial<Customer>>({ name: '', taxId: '', address: '', contactPerson: '', phone: '', priceList: {} });
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
 
-  useEffect(() => localStorage.setItem('pescados_vendas_data_v13', JSON.stringify(customers)), [customers]);
-  useEffect(() => localStorage.setItem('pescados_estoque_data_v13', JSON.stringify(stock)), [stock]);
+  useEffect(() => localStorage.setItem('pescados_vendas_data_v15', JSON.stringify(customers)), [customers]);
+  useEffect(() => localStorage.setItem('pescados_estoque_data_v15', JSON.stringify(stock)), [stock]);
+  useEffect(() => localStorage.setItem('pescados_compras_data_v15', JSON.stringify(purchases)), [purchases]);
 
-  // Atualizar preço automático quando selecionar produto na venda
   useEffect(() => {
     if (isVendaModalOpen && activeCustomerId && formData.productName) {
       const customer = customers.find(c => c.id === activeCustomerId);
@@ -158,6 +166,9 @@ const App: React.FC = () => {
       paid += currentPaid;
       pending += (e.total - currentPaid);
     }));
+
+    const totalSpent = purchases.reduce((acc, p) => acc + p.total, 0);
+
     let inventoryVal = 0;
     let weightInStock = 0;
     stock.forEach(item => {
@@ -171,9 +182,10 @@ const App: React.FC = () => {
       totalPending: pending, 
       totalInStock: weightInStock, 
       totalInventoryValue: inventoryVal,
+      totalSpent,
       customerCount: customers.length 
     };
-  }, [customers, stock]);
+  }, [customers, stock, purchases]);
 
   const timelineMonthlyData = useMemo(() => {
     const monthly: Record<string, { paid: number, pending: number }> = {};
@@ -313,6 +325,32 @@ const App: React.FC = () => {
     setFormData({ ...formData, productName: '', pricePerKg: '', weightKg: '' });
   };
 
+  const handleSavePurchase = (e: React.FormEvent) => {
+    e.preventDefault();
+    const prodName = purchaseFormData.productName.toUpperCase().trim();
+    const weight = Number(purchaseFormData.weightKg);
+    const price = Number(purchaseFormData.pricePerKg);
+    const total = Number(purchaseFormData.total) || (weight * price);
+
+    const newPurchase: PurchaseEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      productName: prodName,
+      weightKg: weight,
+      pricePerKg: price || (total / weight),
+      total,
+      date: purchaseFormData.date,
+      supplier: purchaseFormData.supplier
+    };
+
+    setPurchases(prev => [newPurchase, ...prev]);
+
+    // O controle de compras agora não altera o inventário.
+    // O usuário gerencia o estoque separadamente pela aba Inventário.
+
+    setIsPurchaseModalOpen(false);
+    setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
+  };
+
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (isEditingCustomer && customerForm.id) {
@@ -374,12 +412,13 @@ const App: React.FC = () => {
         <nav className="flex-1 mt-6 overflow-y-auto custom-scrollbar">
           <NavItem id="dashboard" label="Dashboard" icon={LayoutIcon} />
           <NavItem id="inventory" label="Inventário" icon={BoxIcon} />
+          <NavItem id="purchases" label="Controle de Compras" icon={ShoppingIcon} />
           <NavItem id="customers" label="Clientes" icon={UsersIcon} />
           <NavItem id="reports" label="Insights" icon={ChartIcon} />
         </nav>
         <div className="p-6 md:p-8 border-t border-white/5 space-y-4 bg-black/10">
           <button onClick={() => { setIsEditingCustomer(false); setCustomerForm({ name: '', priceList: {} }); setIsCustomerModalOpen(true); }} className="w-full bg-yellow-500 text-[#002855] font-black py-4 rounded-xl shadow-xl shadow-yellow-500/10 uppercase text-[10px] tracking-widest hover:bg-yellow-400 transition-all active:scale-[0.97] flex items-center justify-center gap-3"><PlusIcon className="w-4 h-4" /> Novo Cliente</button>
-          <button onClick={() => { setStockFormData({ productName: '', weightToAdd: '', basePricePerKg: '', date: new Date().toISOString().split('T')[0] }); setIsStockModalOpen(true); }} className="w-full bg-white/5 text-white font-black py-4 rounded-xl uppercase text-[10px] tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-3 border border-white/10"><BoxIcon className="w-4 h-4 text-yellow-400" /> Abastecer</button>
+          <button onClick={() => { setIsPurchaseModalOpen(true); }} className="w-full bg-white/5 text-white font-black py-4 rounded-xl uppercase text-[10px] tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-3 border border-white/10"><ShoppingIcon className="w-4 h-4 text-yellow-400" /> Lançar Compra</button>
         </div>
       </aside>
 
@@ -394,7 +433,7 @@ const App: React.FC = () => {
               <div className="hidden lg:block h-8 w-px bg-slate-200"></div>
               <div className="hidden md:block">
                 <h2 className="text-lg font-black uppercase tracking-tighter text-slate-800 leading-none">
-                  {activeView === 'dashboard' ? 'Início' : activeView === 'inventory' ? 'Estoque' : activeView === 'customers' ? 'Clientes' : 'Auditoria'}
+                  {activeView === 'dashboard' ? 'Início' : activeView === 'inventory' ? 'Estoque' : activeView === 'purchases' ? 'Compras' : activeView === 'customers' ? 'Clientes' : 'Auditoria'}
                 </h2>
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Gestão em Tempo Real</p>
               </div>
@@ -404,8 +443,8 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4 md:gap-8">
             <div className="hidden md:block h-10 w-px bg-slate-100"></div>
             <div className="text-right">
-              <p className="text-[8px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Caixa Total</p>
-              <p className="text-lg md:text-2xl font-black text-emerald-600 leading-none">{formatCurrency(stats.totalPaid)}</p>
+              <p className="text-[8px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Total Compras</p>
+              <p className="text-lg md:text-2xl font-black text-red-600 leading-none">{formatCurrency(stats.totalSpent)}</p>
             </div>
           </div>
         </header>
@@ -413,20 +452,25 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-8 xl:p-12 custom-scrollbar print:p-0">
           {activeView === 'dashboard' && (
             <div className="max-w-[1400px] mx-auto space-y-8 md:space-y-12 animate-in fade-in duration-700">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
                 <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-all">
                   <div className="absolute top-0 right-0 p-6 md:p-10 opacity-5 group-hover:scale-110 transition-transform text-[#002855]"><ChartIcon className="w-16 h-16 md:w-24 md:h-24" /></div>
-                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Faturamento</p>
+                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Receita Bruta</p>
                   <h3 className="text-xl md:text-3xl font-black tracking-tighter text-slate-900 leading-none">{formatCurrency(stats.totalRevenue)}</h3>
                 </div>
                 <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-all">
+                  <div className="absolute top-0 right-0 p-6 md:p-10 opacity-5 group-hover:scale-110 transition-transform text-red-600"><ShoppingIcon className="w-16 h-16 md:w-24 md:h-24" /></div>
+                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Gastos com Compras</p>
+                  <h3 className="text-xl md:text-3xl font-black tracking-tighter text-red-600 leading-none">{formatCurrency(stats.totalSpent)}</h3>
+                </div>
+                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-all">
                   <div className="absolute top-0 right-0 p-6 md:p-10 opacity-5 group-hover:scale-110 transition-transform text-emerald-600"><CheckIcon className="w-16 h-16 md:w-24 md:h-24" /></div>
-                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Caixa Realizado</p>
-                  <h3 className="text-xl md:text-3xl font-black tracking-tighter text-slate-900 leading-none">{formatCurrency(stats.totalPaid)}</h3>
+                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Saldo em Caixa</p>
+                  <h3 className="text-xl md:text-3xl font-black tracking-tighter text-emerald-600 leading-none">{formatCurrency(stats.totalPaid - stats.totalSpent)}</h3>
                 </div>
                 <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-all">
                   <div className="absolute top-0 right-0 p-6 md:p-10 opacity-5 group-hover:scale-110 transition-transform text-yellow-600"><BoxIcon className="w-16 h-16 md:w-24 md:h-24" /></div>
-                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Patrimônio em Peixe (Estoque)</p>
+                  <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Vlr. em Peixe</p>
                   <h3 className="text-xl md:text-3xl font-black tracking-tighter text-slate-900 leading-none">{formatCurrency(stats.totalInventoryValue)}</h3>
                 </div>
               </div>
@@ -440,6 +484,58 @@ const App: React.FC = () => {
                 </div>
                 <div className="w-full h-[300px] md:h-[500px]"><MonthlyBarChart data={timelineMonthlyData} /></div>
               </div>
+            </div>
+          )}
+
+          {activeView === 'purchases' && (
+            <div className="max-w-[1400px] mx-auto space-y-6 md:space-y-10 animate-in slide-in-from-bottom-10">
+               <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="text-center md:text-left">
+                    <h3 className="text-2xl font-black uppercase tracking-tighter italic font-serif leading-none">Controle de Compras</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Investimento Total em Mercadoria (Financeiro)</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="px-6 py-3 bg-red-50 rounded-2xl text-center border border-red-100">
+                      <p className="text-[8px] font-black text-red-600 uppercase mb-1">Total Gasto</p>
+                      <p className="text-lg font-black text-red-700">{formatCurrency(stats.totalSpent)}</p>
+                    </div>
+                    <button onClick={() => setIsPurchaseModalOpen(true)} className="bg-[#002855] text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">Lançar Nova Compra</button>
+                  </div>
+               </div>
+               
+               <div className="bg-white rounded-[2rem] border overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Produto</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fornecedor</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Peso</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Preço Kg</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {purchases.map(p => (
+                        <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{new Date(p.date).toLocaleDateString('pt-BR')}</td>
+                          <td className="px-8 py-5 text-[11px] font-black text-[#002855] uppercase">{p.productName}</td>
+                          <td className="px-8 py-5 text-[11px] font-bold text-slate-400 uppercase">{p.supplier || 'N/A'}</td>
+                          <td className="px-8 py-5 text-[11px] font-black text-slate-900 text-right">{p.weightKg.toFixed(1)}kg</td>
+                          <td className="px-8 py-5 text-[11px] font-black text-slate-400 text-right">{formatCurrency(p.pricePerKg)}</td>
+                          <td className="px-8 py-5 text-[13px] font-black text-red-600 text-right">{formatCurrency(p.total)}</td>
+                          <td className="px-8 py-5 text-center">
+                            <button onClick={() => setPurchases(prev => prev.filter(item => item.id !== p.id))} className="text-slate-300 hover:text-red-500 p-2"><TrashIcon className="w-4 h-4" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                      {purchases.length === 0 && (
+                        <tr><td colSpan={7} className="p-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs">Nenhuma compra registrada</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+               </div>
             </div>
           )}
 
@@ -548,7 +644,26 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* MODAL CLIENTE COM TABELA DE PREÇOS */}
+      {/* MODAL LANÇAR COMPRA */}
+      {isPurchaseModalOpen && (
+        <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in border-4 border-yellow-500/10">
+            <div className="bg-[#002855] p-8 text-white flex justify-between items-center border-b border-yellow-500/20"><h3 className="text-xl font-black uppercase tracking-tighter italic font-serif text-yellow-400">Lançar Nova Compra (Financeiro)</h3><button onClick={() => setIsPurchaseModalOpen(false)} className="text-2xl hover:text-yellow-400">✕</button></div>
+            <form onSubmit={handleSavePurchase} className="p-8 space-y-6">
+              <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Produto Comprado</label><input list="stockList" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 uppercase font-black text-lg outline-none focus:border-[#002855]" value={purchaseFormData.productName} onChange={e => setPurchaseFormData({ ...purchaseFormData, productName: e.target.value })} /></div>
+              <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Fornecedor (Opcional)</label><input className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 uppercase font-black text-sm outline-none focus:border-[#002855]" value={purchaseFormData.supplier} onChange={e => setPurchaseFormData({ ...purchaseFormData, supplier: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Peso (Kg)</label><input type="number" step="0.001" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-[#002855] text-center focus:border-[#002855] outline-none" value={purchaseFormData.weightKg} onChange={e => setPurchaseFormData({ ...purchaseFormData, weightKg: e.target.value })} /></div>
+                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2">Valor Total (R$)</label><input type="number" step="0.01" required className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-5 font-mono text-xl font-black text-red-600 text-center focus:border-[#002855] outline-none" placeholder="0,00" value={purchaseFormData.total} onChange={e => setPurchaseFormData({ ...purchaseFormData, total: e.target.value })} /></div>
+              </div>
+              <p className="text-[8px] font-bold text-slate-400 uppercase text-center mt-2">* Compras não afetam o inventário físico automaticamente.</p>
+              <button type="submit" className="w-full bg-[#002855] text-white font-black py-5 rounded-xl shadow-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all border border-yellow-500/20">REGISTRAR GASTO</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CLIENTE */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden my-auto animate-in zoom-in border-4 border-yellow-500/10">
@@ -574,7 +689,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Tabela de Preços do Cliente */}
               <div className="mt-8">
                 <h4 className="text-[10px] font-black text-[#002855] uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">Tabela de Preços (R$ / Kg)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
@@ -633,7 +747,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* OUTROS MODAIS MANTIDOS SEM ALTERAÇÃO */}
       {isStockModalOpen && (
         <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[110] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in border-4 border-yellow-500/10">

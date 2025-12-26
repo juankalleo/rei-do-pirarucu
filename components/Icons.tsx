@@ -3,20 +3,15 @@ import React from 'react';
 
 export const FishIcon = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    {/* Corpo alongado do Pirarucu */}
     <path 
       d="M5 20 C 15 12, 35 10, 60 10 C 85 10, 95 15, 95 20 C 95 25, 85 30, 60 30 C 35 30, 15 28, 5 20 Z" 
       fill="currentColor" 
       fillOpacity="0.2" 
     />
-    {/* Nadadeiras características perto da cauda */}
     <path d="M75 10 Q 82 2, 90 12" fill="none" strokeWidth="1.5" />
     <path d="M75 30 Q 82 38, 90 28" fill="none" strokeWidth="1.5" />
-    {/* Olho */}
     <circle cx="15" cy="18" r="1.5" fill="currentColor" />
-    {/* Detalhe da Guelra */}
     <path d="M22 15 Q 25 20, 22 25" fill="none" strokeWidth="1" />
-    {/* Linha lateral */}
     <path d="M30 20 H 80" strokeDasharray="2 4" strokeWidth="0.5" />
   </svg>
 );
@@ -55,4 +50,8 @@ export const LayoutIcon = ({ className }: { className?: string }) => (
 
 export const UsersIcon = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+);
+
+export const ShoppingIcon = ({ className }: { className?: string }) => (
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
 );

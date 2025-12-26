@@ -1,9 +1,19 @@
 
-export type ViewType = 'dashboard' | 'inventory' | 'customers' | 'reports';
+export type ViewType = 'dashboard' | 'inventory' | 'customers' | 'reports' | 'purchases';
 
 export interface PaymentRecord {
   date: string;
   amount: number;
+}
+
+export interface PurchaseEntry {
+  id: string;
+  productName: string;
+  weightKg: number;
+  pricePerKg: number;
+  total: number;
+  date: string;
+  supplier?: string;
 }
 
 export interface SaleEntry {
@@ -14,14 +24,14 @@ export interface SaleEntry {
   total: number;
   date: string;
   isPaid: boolean;
-  paidAmount?: number; // Valor efetivamente pago até o momento
-  paymentHistory?: PaymentRecord[]; // Histórico de quando os pagamentos foram feitos
+  paidAmount?: number;
+  paymentHistory?: PaymentRecord[];
 }
 
 export interface StockItem {
   productName: string;
   availableWeight: number;
-  basePricePerKg: number; // Preço sugerido de venda para cálculo de valor em estoque
+  basePricePerKg: number;
   lastUpdate: string;
 }
 
@@ -42,6 +52,6 @@ export interface GlobalStats {
   totalPaid: number;
   totalPending: number;
   totalInStock: number;
-  totalInventoryValue: number; // Novo campo: Valor em R$ do estoque total
+  totalInventoryValue: number;
   customerCount: number;
 }
