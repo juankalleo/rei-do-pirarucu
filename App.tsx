@@ -56,6 +56,8 @@ const App: React.FC = () => {
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
 
   const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null);
   const [lastSale, setLastSale] = useState<{customer: Customer, sale: SaleEntry} | null>(null);
@@ -67,11 +69,16 @@ const App: React.FC = () => {
   const [stockFormData, setStockFormData] = useState({ name: '', weight: '', price: '' });
   const [purchaseFormData, setPurchaseFormData] = useState({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   const [creditFormData, setCreditFormData] = useState({ limit: '', walletAdd: '' });
+  const [customerFormData, setCustomerFormData] = useState({ name: '', taxId: '', phone: '', address: '' });
+  const [newProductFormData, setNewProductFormData] = useState({ name: '', weight: '', price: '' });
   const [emailToShare, setEmailToShare] = useState('');
   
   const [dispatchTab, setDispatchTab] = useState<'pay' | 'ship'>('pay');
   const [payData, setPayData] = useState({ amount: '', method: 'Pix', date: new Date().toISOString().split('T')[0] });
   const [shipData, setShipData] = useState({ carrier: '', tracking: '' });
+
+  // Itens que não devem aparecer no estoque físico
+  const SERVICE_ITEMS = ['FRETE', 'CAIXA', 'DEPOSITO'];
 
   useEffect(() => localStorage.setItem('pirarucu_customers_v5', JSON.stringify(customers)), [customers]);
   useEffect(() => localStorage.setItem('pirarucu_stock_v5', JSON.stringify(stock)), [stock]);
@@ -142,11 +149,14 @@ const App: React.FC = () => {
       }
     }
     
-    setStock(prev => prev.map(s => s.productName === pName ? { 
-      ...s, 
-      availableWeight: s.availableWeight - weight,
-      history: [{ id: Date.now().toString(), type: 'exit', weight: -weight, date: formData.date, description: `Venda p/ ${customer?.name}` }, ...(s.history || [])]
-    } : s));
+    // Só abate do estoque se não for um item de serviço
+    if (!SERVICE_ITEMS.includes(pName)) {
+      setStock(prev => prev.map(s => s.productName === pName ? { 
+        ...s, 
+        availableWeight: s.availableWeight - weight,
+        history: [{ id: Date.now().toString(), type: 'exit', weight: -weight, date: formData.date, description: `Venda p/ ${customer?.name}` }, ...(s.history || [])]
+      } : s));
+    }
 
     const newSale: SaleEntry = {
       id: Math.random().toString(36).substr(2, 9).toUpperCase(),
@@ -167,10 +177,62 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAddCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerFormData.name) return;
+    
+    const newCustomer: Customer = {
+      id: Date.now().toString(),
+      name: customerFormData.name.toUpperCase().trim(),
+      taxId: customerFormData.taxId,
+      phone: customerFormData.phone,
+      address: customerFormData.address,
+      priceList: {},
+      entries: [],
+      walletBalance: 0,
+      creditLimit: 0
+    };
+
+    setCustomers(prev => [newCustomer, ...prev]);
+    setIsCustomerModalOpen(false);
+    setCustomerFormData({ name: '', taxId: '', phone: '', address: '' });
+  };
+
+  const handleAddNewProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pName = newProductFormData.name.toUpperCase().trim();
+    if (!pName) return;
+
+    if (stock.find(s => s.productName === pName)) {
+      alert("Este produto já existe no catálogo.");
+      return;
+    }
+
+    const weight = Number(newProductFormData.weight) || 0;
+    const price = Number(newProductFormData.price) || 0;
+
+    const newItem: StockItem = {
+      productName: pName,
+      availableWeight: weight,
+      basePricePerKg: price,
+      lastUpdate: new Date().toISOString(),
+      history: weight > 0 ? [{ 
+        id: Date.now().toString(), 
+        type: 'adjustment', 
+        weight: weight, 
+        date: new Date().toISOString(), 
+        description: 'Saldo Inicial de Cadastro' 
+      }] : []
+    };
+
+    setStock(prev => [newItem, ...prev]);
+    setIsNewProductModalOpen(false);
+    setNewProductFormData({ name: '', weight: '', price: '' });
+  };
+
   const handleSendEmail = (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailToShare || !lastSale) return;
-    // Simulação de envio de PDF por e-mail
     alert(`O PDF do pedido #${lastSale.sale.id} foi gerado e enviado para ${emailToShare} com sucesso!`);
     setEmailToShare('');
   };
@@ -195,18 +257,60 @@ const App: React.FC = () => {
 
   const handlePurchaseEntry = (e: React.FormEvent) => {
     e.preventDefault();
-    const total = Number(purchaseFormData.total) || (Number(purchaseFormData.weightKg) * Number(purchaseFormData.pricePerKg));
+    const pName = purchaseFormData.productName.toUpperCase().trim();
+    const weight = Number(purchaseFormData.weightKg);
+    const price = Number(purchaseFormData.pricePerKg);
+    const total = Number(purchaseFormData.total) || (weight * price);
+
     const newPurchase: PurchaseEntry = {
       id: `PUR-${Date.now().toString().slice(-6)}`,
-      productName: purchaseFormData.productName.toUpperCase().trim(),
-      weightKg: Number(purchaseFormData.weightKg),
-      pricePerKg: Number(purchaseFormData.pricePerKg),
+      productName: pName,
+      weightKg: weight,
+      pricePerKg: price,
       total,
       date: purchaseFormData.date,
       supplier: purchaseFormData.supplier
     };
+
     setPurchases(prev => [newPurchase, ...prev]);
+
+    // Só atualiza o estoque se não for item de serviço
+    if (!SERVICE_ITEMS.includes(pName)) {
+      setStock(prev => {
+        const existing = prev.find(s => s.productName === pName);
+        if (existing) {
+          return prev.map(s => s.productName === pName ? {
+            ...s,
+            availableWeight: s.availableWeight + weight,
+            basePricePerKg: price || s.basePricePerKg,
+            history: [{ 
+              id: Date.now().toString(), 
+              type: 'entry', 
+              weight: weight, 
+              date: purchaseFormData.date, 
+              description: `Compra: ${purchaseFormData.supplier || 'Fornecedor'}` 
+            }, ...(s.history || [])]
+          } : s);
+        } else {
+          return [...prev, {
+            productName: pName,
+            availableWeight: weight,
+            basePricePerKg: price,
+            lastUpdate: new Date().toISOString(),
+            history: [{ 
+              id: Date.now().toString(), 
+              type: 'entry', 
+              weight: weight, 
+              date: purchaseFormData.date, 
+              description: `Compra Inicial: ${purchaseFormData.supplier || 'Fornecedor'}` 
+            }]
+          }];
+        }
+      });
+    }
+
     setIsPurchaseModalOpen(false);
+    setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   };
 
   const handleCreditUpdate = (e: React.FormEvent) => {
@@ -248,6 +352,11 @@ const App: React.FC = () => {
       };
     }));
     setIsDispatchModalOpen(false);
+  };
+
+  const handleDeletePurchase = (id: string) => {
+    if (!window.confirm("Deseja realmente excluir este registro de compra? Isso não estornará o estoque automaticamente.")) return;
+    setPurchases(prev => prev.filter(p => p.id !== id));
   };
 
   return (
@@ -327,6 +436,185 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {activeView === 'purchases' && (
+            <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-500">
+               <div className="flex justify-between items-center mb-6">
+                 <div>
+                    <h3 className="text-3xl font-black uppercase italic text-[#002855]">Controle de <span className="text-yellow-500">Compras</span></h3>
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Gestão de entradas e custos de aquisição</p>
+                 </div>
+                 <button 
+                   onClick={() => setIsPurchaseModalOpen(true)} 
+                   className="bg-[#002855] text-white px-8 py-5 rounded-[2rem] font-black uppercase text-[11px] tracking-[0.1em] flex items-center gap-3 shadow-xl hover:shadow-2xl hover:bg-blue-900 transition-all active:scale-95 border border-white/10"
+                 >
+                    <PlusIcon className="w-5 h-5 text-yellow-500" /> NOVO LANÇAMENTO DE COMPRA
+                 </button>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4">
+                     <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center text-red-600">
+                        <ShoppingIcon className="w-6 h-6" />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Custo Total Acumulado</p>
+                        <p className="text-xl font-black text-slate-900 tabular-nums">{formatCurrency(stats.costs)}</p>
+                     </div>
+                  </div>
+                  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4">
+                     <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
+                        <BoxIcon className="w-6 h-6" />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Volume Comprado</p>
+                        <p className="text-xl font-black text-slate-900 tabular-nums">{purchases.reduce((acc, p) => acc + p.weightKg, 0).toFixed(1)} KG</p>
+                     </div>
+                  </div>
+                  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4">
+                     <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-[#002855]">
+                        <UsersIcon className="w-6 h-6" />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Total Fornecedores</p>
+                        <p className="text-xl font-black text-slate-900 tabular-nums">{new Set(purchases.map(p => p.supplier)).size}</p>
+                     </div>
+                  </div>
+               </div>
+
+               <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-200/60 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-500">
+                    <tr>
+                      <th className="px-8 py-6">Data</th>
+                      <th className="px-8 py-6">Produto</th>
+                      <th className="px-8 py-6">Fornecedor</th>
+                      <th className="px-8 py-6 text-right">Peso (KG)</th>
+                      <th className="px-8 py-6 text-right">Preço/KG</th>
+                      <th className="px-8 py-6 text-right">Total</th>
+                      <th className="px-8 py-6 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {purchases.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-8 py-20 text-center">
+                           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma compra registrada no sistema.</p>
+                        </td>
+                      </tr>
+                    ) : purchases.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
+                        <td className="px-8 py-5 text-xs font-bold text-slate-400">{new Date(p.date).toLocaleDateString()}</td>
+                        <td className="px-8 py-5 text-xs font-black uppercase text-[#002855]">{p.productName}</td>
+                        <td className="px-8 py-5 text-xs font-bold uppercase text-slate-500">{p.supplier || 'N/A'}</td>
+                        <td className="px-8 py-5 text-right font-black tabular-nums">{p.weightKg.toFixed(1)}</td>
+                        <td className="px-8 py-5 text-right font-bold text-slate-400 tabular-nums">{formatCurrency(p.pricePerKg)}</td>
+                        <td className="px-8 py-5 text-right font-black text-red-600 tabular-nums">{formatCurrency(p.total)}</td>
+                        <td className="px-8 py-5 text-center">
+                           <button 
+                             onClick={() => handleDeletePurchase(p.id)} 
+                             className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                           >
+                             <TrashIcon className="w-4 h-4" />
+                           </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeView === 'customers' && (
+            <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-500">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="text-3xl font-black uppercase italic text-[#002855]">Vendas & <span className="text-yellow-500">Clientes</span></h3>
+                   <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Gestão de carteira e histórico de faturamento</p>
+                </div>
+                <button 
+                  onClick={() => setIsCustomerModalOpen(true)} 
+                  className="bg-[#002855] text-white px-8 py-5 rounded-[2rem] font-black uppercase text-[11px] tracking-[0.1em] flex items-center gap-3 shadow-xl hover:shadow-2xl hover:bg-blue-900 transition-all active:scale-95 border border-white/10"
+                >
+                   <PlusIcon className="w-5 h-5 text-yellow-500" /> ADICIONAR NOVO CLIENTE
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                {customers.map(c => (
+                  <CustomerCard 
+                    key={c.id} customer={c} 
+                    onAddEntry={(id) => { setActiveCustomerId(id); setIsVendaModalOpen(true); }} 
+                    onDeleteEntry={(cid, eid) => {
+                      if (!window.confirm("Estornar peso ao estoque físico?")) return;
+                      const ent = c.entries.find(e => e.id === eid);
+                      if (ent && !SERVICE_ITEMS.includes(ent.productName)) setStock(p => p.map(s => s.productName === ent.productName ? { ...s, availableWeight: s.availableWeight + ent.weightKg } : s));
+                      setCustomers(p => p.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.filter(e => e.id !== eid) } : cust));
+                    }} 
+                    onTogglePayment={(cid, eid) => {
+                      setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.map(e => e.id === eid ? { ...e, isPaid: !e.isPaid, paidAmount: !e.isPaid ? e.total : 0, paidAt: !e.isPaid ? new Date().toISOString() : undefined } : e) } : cust));
+                    }} 
+                    onPartialPayment={(cid, eid) => { 
+                      const entry = c.entries.find(ex => ex.id === eid);
+                      const remaining = (entry?.total || 0) - (entry?.paidAmount || 0);
+                      setDispatchSelection({cid, eids: [eid]}); 
+                      setDispatchTab('pay'); 
+                      setPayData(p => ({...p, amount: remaining.toString() })); 
+                      setIsDispatchModalOpen(true); 
+                    }} 
+                    onDeleteCustomer={(id) => { if(window.confirm("Atenção: Excluir o cliente removerá todo o histórico de vendas. Deseja prosseguir?")) setCustomers(p => p.filter(cx => cx.id !== id)); }} 
+                    onPrintOrder={(entries) => { setOrderToPrint({ customer: c, entries }); setTimeout(() => window.print(), 500); }}
+                    onDispatch={(cid, eids) => { setDispatchSelection({cid, eids}); setDispatchTab('ship'); setIsDispatchModalOpen(true); }}
+                    onManageCredit={(id) => { 
+                      const cust = customers.find(x => x.id === id);
+                      setActiveCustomerId(id); 
+                      setCreditFormData({ limit: (cust?.creditLimit || 0).toString(), walletAdd: '0' });
+                      setIsCreditModalOpen(true); 
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeView === 'inventory' && (
+            <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-500">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="text-3xl font-black uppercase italic text-[#002855]">Estoque <span className="text-yellow-500">Físico</span></h3>
+                   <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Monitoramento de saldo e custo base</p>
+                </div>
+                <button 
+                  onClick={() => setIsNewProductModalOpen(true)} 
+                  className="bg-[#002855] text-white px-8 py-5 rounded-[2rem] font-black uppercase text-[11px] tracking-[0.1em] flex items-center gap-3 shadow-xl hover:shadow-2xl hover:bg-blue-900 transition-all active:scale-95 border border-white/10"
+                >
+                   <PlusIcon className="w-5 h-5 text-yellow-500" /> CADASTRAR NOVO PRODUTO
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                {stock
+                  .filter(item => !SERVICE_ITEMS.includes(item.productName.toUpperCase()))
+                  .map(item => {
+                    const isCritical = item.availableWeight <= 0;
+                    const isLow = item.availableWeight <= 20;
+                    const statusColor = isCritical ? 'border-red-500 bg-red-50 text-red-900' : isLow ? 'border-yellow-500 bg-yellow-50 text-amber-900' : 'border-emerald-500 bg-emerald-50 text-emerald-900';
+                    return (
+                      <div key={item.productName} className={`p-8 rounded-[2.5rem] border-t-8 shadow-xl flex flex-col justify-between h-72 transition-all hover:scale-[1.03] group ${statusColor}`}>
+                        <div className="flex justify-between items-start">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-black transition-colors">{item.productName}</h4>
+                          <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="p-2 hover:bg-black/5 rounded-xl transition-all"><EditIcon className="w-5 h-5"/></button>
+                        </div>
+                        <div>
+                          <p className="text-5xl font-black tracking-tighter tabular-nums">{item.availableWeight.toFixed(1)}<span className="text-lg ml-1 opacity-60">kg</span></p>
+                          <p className="text-[10px] font-bold uppercase mt-2 opacity-50">Custo Ref: {formatCurrency(item.basePricePerKg)}</p>
+                        </div>
+                        <button onClick={() => { setSelectedStockItem(item); setIsHistoryModalOpen(true); }} className="text-[10px] font-black uppercase tracking-widest pt-4 border-t border-black/5 hover:opacity-50 text-center transition-all">Auditoria de Balanço</button>
+                      </div>
+                    );
+                })}
+              </div>
+            </div>
+          )}
+
           {activeView === 'reports' && (
             <div className="max-w-[1400px] mx-auto space-y-10 animate-in fade-in duration-500">
               <div className="flex justify-between items-end border-b border-slate-200 pb-6">
@@ -390,82 +678,18 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
-
-          {activeView === 'customers' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 animate-in fade-in duration-500">
-              {customers.map(c => (
-                <CustomerCard 
-                  key={c.id} customer={c} 
-                  onAddEntry={(id) => { setActiveCustomerId(id); setIsVendaModalOpen(true); }} 
-                  onDeleteEntry={(cid, eid) => {
-                    if (!window.confirm("Estornar peso ao estoque físico?")) return;
-                    const ent = c.entries.find(e => e.id === eid);
-                    if (ent) setStock(p => p.map(s => s.productName === ent.productName ? { ...s, availableWeight: s.availableWeight + ent.weightKg } : s));
-                    setCustomers(p => p.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.filter(e => e.id !== eid) } : cust));
-                  }} 
-                  onTogglePayment={(cid, eid) => {
-                    setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.map(e => e.id === eid ? { ...e, isPaid: !e.isPaid, paidAmount: !e.isPaid ? e.total : 0, paidAt: !e.isPaid ? new Date().toISOString() : undefined } : e) } : cust));
-                  }} 
-                  onPartialPayment={(cid, eid) => { 
-                    const entry = c.entries.find(ex => ex.id === eid);
-                    const remaining = (entry?.total || 0) - (entry?.paidAmount || 0);
-                    setDispatchSelection({cid, eids: [eid]}); 
-                    setDispatchTab('pay'); 
-                    setPayData(p => ({...p, amount: remaining.toString() })); 
-                    setIsDispatchModalOpen(true); 
-                  }} 
-                  onDeleteCustomer={(id) => { if(window.confirm("Excluir cliente?")) setCustomers(p => p.filter(cx => cx.id !== id)); }} 
-                  onPrintOrder={(entries) => { setOrderToPrint({ customer: c, entries }); setTimeout(() => window.print(), 500); }}
-                  onDispatch={(cid, eids) => { setDispatchSelection({cid, eids}); setDispatchTab('ship'); setIsDispatchModalOpen(true); }}
-                  onManageCredit={(id) => { 
-                    const cust = customers.find(x => x.id === id);
-                    setActiveCustomerId(id); 
-                    setCreditFormData({ limit: (cust?.creditLimit || 0).toString(), walletAdd: '0' });
-                    setIsCreditModalOpen(true); 
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
-          {activeView === 'inventory' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {stock.map(item => {
-                const isCritical = item.availableWeight <= 0;
-                const isLow = item.availableWeight <= 20;
-                const statusColor = isCritical ? 'border-red-500 bg-red-50 text-red-900' : isLow ? 'border-yellow-500 bg-yellow-50 text-amber-900' : 'border-emerald-500 bg-emerald-50 text-emerald-900';
-                return (
-                  <div key={item.productName} className={`p-8 rounded-[2.5rem] border-t-8 shadow-xl flex flex-col justify-between h-72 transition-all hover:scale-[1.03] group ${statusColor}`}>
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-black transition-colors">{item.productName}</h4>
-                      <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="p-2 hover:bg-black/5 rounded-xl transition-all"><EditIcon className="w-5 h-5"/></button>
-                    </div>
-                    <div>
-                      <p className="text-5xl font-black tracking-tighter tabular-nums">{item.availableWeight.toFixed(1)}<span className="text-lg ml-1 opacity-60">kg</span></p>
-                      <p className="text-[10px] font-bold uppercase mt-2 opacity-50">Custo Ref: {formatCurrency(item.basePricePerKg)}</p>
-                    </div>
-                    <button onClick={() => { setSelectedStockItem(item); setIsHistoryModalOpen(true); }} className="text-[10px] font-black uppercase tracking-widest pt-4 border-t border-black/5 hover:opacity-50 text-center transition-all">Auditoria de Balanço</button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
 
-        {/* PRINT / PDF VIEW (PROFESSIONAL PEDIDO DE VENDA - PESCADOS REI DO PIRARUCU) */}
         {orderToPrint && (
           <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-16 text-black font-sans leading-relaxed">
             <div className="max-w-4xl mx-auto border-[10px] border-[#002855] p-10 rounded-3xl relative overflow-hidden">
-              {/* Logo Background Decor */}
               <div className="absolute top-0 right-0 w-48 h-48 bg-[#002855] rounded-bl-full flex items-center justify-center -translate-y-4 translate-x-4 opacity-10">
                  <FishIcon className="w-24 h-24 text-white -rotate-12" />
               </div>
-              
               <div className="border-b-4 border-[#002855] pb-8 mb-10 flex justify-between items-center relative z-10">
                  <div>
                    <h1 className="text-6xl font-black italic uppercase text-[#002855] mb-2">REI DO <span className="text-yellow-500">PIRARUCU</span></h1>
                    <p className="text-[11px] uppercase font-bold tracking-[0.5em] text-slate-400">Pescados e Frutos do Mar Amazônicos • PVH/RO</p>
-                   <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Excelência e Qualidade na sua Mesa</p>
                  </div>
                  <div className="text-right">
                     <div className="bg-[#002855] text-yellow-500 px-6 py-4 rounded-2xl shadow-xl">
@@ -474,7 +698,6 @@ const App: React.FC = () => {
                     </div>
                  </div>
               </div>
-
               <div className="grid grid-cols-2 gap-12 mb-12">
                 <div className="bg-slate-50 p-8 rounded-[2rem] border-l-8 border-[#002855] shadow-sm">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">DADOS DO CLIENTE</h4>
@@ -482,19 +705,15 @@ const App: React.FC = () => {
                   <div className="space-y-1 text-xs font-bold text-slate-600">
                     <p className="flex justify-between border-b border-slate-200 pb-1">CPF/CNPJ: <span>{orderToPrint.customer.taxId || 'N/A'}</span></p>
                     <p className="flex justify-between border-b border-slate-200 pb-1 mt-2">EMISSÃO: <span>{new Date().toLocaleDateString('pt-BR')}</span></p>
-                    <p className="flex justify-between border-b border-slate-200 pb-1 mt-2">CONTATO: <span>{orderToPrint.customer.phone || '(69) 99999-9999'}</span></p>
                   </div>
                 </div>
                 <div className="flex flex-col justify-end text-right">
                    <div className="inline-block bg-yellow-50 border-2 border-yellow-200 p-6 rounded-[2rem] shadow-sm">
                       <p className="text-[10px] font-black uppercase tracking-widest text-yellow-800 mb-1">CONDIÇÃO COMERCIAL</p>
                       <p className="text-xl font-black uppercase text-yellow-900 italic">CARTEIRA / FATURADO</p>
-                      <div className="h-[2px] w-full bg-yellow-200 my-2"></div>
-                      <p className="text-[8px] font-bold text-yellow-700 uppercase">Validade do Orçamento: 48 HORAS</p>
                    </div>
                 </div>
               </div>
-
               <table className="w-full mb-12 border-collapse overflow-hidden rounded-2xl shadow-sm border border-slate-100">
                 <thead>
                   <tr className="bg-[#002855] text-white uppercase text-[10px] font-black tracking-[0.2em]">
@@ -506,7 +725,7 @@ const App: React.FC = () => {
                 </thead>
                 <tbody className="divide-y-2 divide-slate-100">
                   {orderToPrint.entries.map((e) => (
-                    <tr key={e.id} className="font-bold text-sm bg-white hover:bg-slate-50 transition-colors">
+                    <tr key={e.id} className="font-bold text-sm bg-white">
                       <td className="p-6 uppercase font-black text-[#002855]">{e.productName}</td>
                       <td className="p-6 text-center font-mono text-slate-600">{e.weightKg.toFixed(1)}</td>
                       <td className="p-6 text-right font-mono text-slate-600">{formatCurrency(e.pricePerKg)}</td>
@@ -521,119 +740,121 @@ const App: React.FC = () => {
                   </tr>
                 </tfoot>
               </table>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mt-16 mb-16">
-                 <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-200">
-                    <h5 className="text-[10px] font-black uppercase mb-4 tracking-widest text-slate-400 flex items-center gap-2">
-                       <LayoutIcon className="w-4 h-4" /> TERMOS DE RECEBIMENTO
-                    </h5>
-                    <ul className="text-[9px] font-bold text-slate-500 space-y-3 uppercase leading-relaxed">
-                       <li className="flex gap-2"><span className="text-yellow-600">01.</span> Preços e disponibilidade de estoque estão sujeitos a flutuação diária.</li>
-                       <li className="flex gap-2"><span className="text-yellow-600">02.</span> A conferência de peso deve ser realizada obrigatoriamente no descarregamento.</li>
-                       <li className="flex gap-2"><span className="text-yellow-600">03.</span> Produtos perecíveis: Manter a temperatura de conservação recomendada.</li>
-                    </ul>
-                 </div>
-                 <div className="flex flex-col justify-end items-center gap-12">
-                    <div className="w-full border-t-4 border-slate-900 pt-4 text-center">
-                       <p className="text-[10px] font-black uppercase tracking-widest mb-1">CARIMBO E ASSINATURA CLIENTE</p>
-                       <p className="text-[8px] font-bold text-slate-400 uppercase">Recebido em ____/____/____</p>
-                    </div>
-                    <div className="w-full border-t-4 border-slate-300 pt-4 text-center">
-                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">EXPEDIÇÃO - REI DO PIRARUCU</p>
-                    </div>
-                 </div>
-              </div>
-
-              <div className="flex justify-between items-center border-t-2 border-dashed border-slate-200 pt-8 mt-12">
-                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#002855] rounded-xl">
-                       <FishIcon className="w-6 h-6 text-yellow-500" />
-                    </div>
-                    <p className="text-[9px] font-black uppercase text-slate-400 max-w-[200px]">Pescados Rei do Pirarucu • Gerado eletronicamente para fins de controle logístico e comercial.</p>
-                 </div>
-                 <div className="flex gap-2">
-                    {[...Array(5)].map((_, i) => <div key={i} className="w-2 h-2 bg-[#002855] rounded-full opacity-20"></div>)}
-                 </div>
-              </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* SUCCESS MODAL AFTER SALE */}
+      {/* MODALS */}
+      {isCustomerModalOpen && (
+        <Modal title="Cadastrar Novo Cliente" onClose={() => setIsCustomerModalOpen(false)}>
+           <div className="mb-6 p-6 bg-blue-50 rounded-[2rem] border border-blue-200 flex items-center gap-6 shadow-inner">
+              <UsersIcon className="w-12 h-12 text-[#002855]" />
+              <div>
+                 <p className="text-xs font-black uppercase text-[#002855] tracking-wider leading-none">Novas Parcerias</p>
+                 <p className="text-[10px] text-blue-600 uppercase font-bold mt-2 leading-relaxed">Cadastre os dados básicos para iniciar o faturamento e controle de limite deste cliente.</p>
+              </div>
+           </div>
+           <form onSubmit={handleAddCustomer} className="space-y-5">
+              <Input label="Nome Completo / Razão Social" uppercase required value={customerFormData.name} onChange={(v: string) => setCustomerFormData({...customerFormData, name: v})} />
+              <Input label="CPF ou CNPJ" value={customerFormData.taxId} onChange={(v: string) => setCustomerFormData({...customerFormData, taxId: v})} />
+              <Input label="Telefone de Contato" value={customerFormData.phone} onChange={(v: string) => setCustomerFormData({...customerFormData, phone: v})} />
+              <Input label="Endereço Completo" uppercase value={customerFormData.address} onChange={(v: string) => setCustomerFormData({...customerFormData, address: v})} />
+              <PrimaryButton>FINALIZAR CADASTRO</PrimaryButton>
+           </form>
+        </Modal>
+      )}
+
+      {isNewProductModalOpen && (
+        <Modal title="Cadastrar Novo Produto / Espécie" onClose={() => setIsNewProductModalOpen(false)}>
+           <div className="mb-6 p-6 bg-emerald-50 rounded-[2rem] border border-emerald-200 flex items-center gap-6 shadow-inner">
+              <BoxIcon className="w-12 h-12 text-emerald-600" />
+              <div>
+                 <p className="text-xs font-black uppercase text-emerald-800 tracking-wider leading-none">Novas Espécies</p>
+                 <p className="text-[10px] text-emerald-600 uppercase font-bold mt-2 leading-relaxed">Adicione novos cortes ou espécies ao seu catálogo de faturamento.</p>
+              </div>
+           </div>
+           <form onSubmit={handleAddNewProduct} className="space-y-5">
+              <Input label="Nome do Produto / Espécie" uppercase required value={newProductFormData.name} onChange={(v: string) => setNewProductFormData({...newProductFormData, name: v})} />
+              <div className="grid grid-cols-2 gap-4">
+                 <Input label="Estoque Inicial (KG)" type="number" step="0.01" value={newProductFormData.weight} onChange={(v: string) => setNewProductFormData({...newProductFormData, weight: v})} />
+                 <Input label="Preço Custo Base (R$)" type="number" step="0.01" value={newProductFormData.price} onChange={(v: string) => setNewProductFormData({...newProductFormData, price: v})} />
+              </div>
+              <PrimaryButton>SALVAR NO CATÁLOGO</PrimaryButton>
+           </form>
+        </Modal>
+      )}
+
       {isSuccessModalOpen && lastSale && (
         <Modal title="Venda Concluída com Sucesso!" onClose={() => setIsSuccessModalOpen(false)}>
            <div className="flex flex-col items-center text-center">
-              <div className="w-24 h-24 bg-emerald-100 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner animate-bounce">
+              <div className="w-24 h-24 bg-emerald-100 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner">
                  <CheckIcon className="w-12 h-12 text-emerald-600" />
               </div>
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">CLIENTE ATENDIDO</p>
               <h3 className="text-3xl font-black uppercase text-[#002855] mb-2 italic">{lastSale.customer.name}</h3>
               <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 mb-8 inline-block shadow-inner">
                  <p className="text-[10px] font-bold text-slate-500 uppercase">Total do Pedido</p>
                  <p className="text-2xl font-black text-slate-900 font-mono">{formatCurrency(lastSale.sale.total)}</p>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-8">
                  <button 
                    onClick={() => { setOrderToPrint({ customer: lastSale.customer, entries: [lastSale.sale] }); setTimeout(() => window.print(), 500); }}
-                   className="flex items-center justify-center gap-4 p-6 bg-[#002855] text-white rounded-[2rem] hover:bg-blue-900 transition-all shadow-xl hover:shadow-2xl active:scale-95 group"
+                   className="flex items-center justify-center gap-4 p-6 bg-[#002855] text-white rounded-[2rem] hover:bg-blue-900 transition-all shadow-xl active:scale-95 group"
                  >
-                    <div className="bg-white/10 p-3 rounded-xl group-hover:bg-yellow-400 group-hover:text-[#002855] transition-all">
-                       <PrinterIcon className="w-6 h-6" />
-                    </div>
-                    <div className="text-left">
-                       <span className="block text-[10px] font-black uppercase tracking-widest leading-none">Gerar PDF</span>
-                       <span className="text-[8px] font-bold text-blue-200/50 uppercase leading-none mt-1">Imprimir Pedido</span>
-                    </div>
+                    <PrinterIcon className="w-6 h-6 text-yellow-400" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Gerar PDF</span>
                  </button>
                  <a 
-                   href={`https://wa.me/?text=Olá ${lastSale.customer.name}, segue o comprovante do seu pedido na *Rei do Pirarucu*: %0A%0A📦 *Item:* ${lastSale.sale.productName}%0A⚖️ *Peso:* ${lastSale.sale.weightKg.toFixed(1)}kg%0A💰 *Total:* ${formatCurrency(lastSale.sale.total)}%0A%0A_Agradecemos a preferência!_`}
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   className="flex items-center justify-center gap-4 p-6 bg-emerald-600 text-white rounded-[2rem] hover:bg-emerald-700 transition-all shadow-xl hover:shadow-2xl active:scale-95 group"
+                   href={`https://wa.me/?text=Olá ${lastSale.customer.name}, segue o comprovante do seu pedido na *Rei do Pirarucu*: %0A%0A📦 *Item:* ${lastSale.sale.productName}%0A💰 *Total:* ${formatCurrency(lastSale.sale.total)}`}
+                   target="_blank" rel="noopener noreferrer"
+                   className="flex items-center justify-center gap-4 p-6 bg-emerald-600 text-white rounded-[2rem] hover:bg-emerald-700 transition-all shadow-xl active:scale-95 group"
                  >
-                    <div className="bg-white/10 p-3 rounded-xl group-hover:bg-white group-hover:text-emerald-600 transition-all">
-                       <UsersIcon className="w-6 h-6" />
-                    </div>
-                    <div className="text-left">
-                       <span className="block text-[10px] font-black uppercase tracking-widest leading-none">WhatsApp</span>
-                       <span className="text-[8px] font-bold text-emerald-100/50 uppercase leading-none mt-1">Enviar Recibo</span>
-                    </div>
+                    <UsersIcon className="w-6 h-6 text-white" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">WhatsApp</span>
                  </a>
               </div>
-
               <div className="w-full bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 shadow-inner">
-                 <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-[#002855]">
-                       <LayoutIcon className="w-5 h-5" />
-                    </div>
-                    <p className="text-[10px] font-black uppercase text-[#002855] tracking-widest">Enviar Pedido por E-mail</p>
-                 </div>
+                 <p className="text-[10px] font-black uppercase text-[#002855] tracking-widest mb-4">Enviar Pedido por E-mail</p>
                  <form onSubmit={handleSendEmail} className="flex gap-2">
                     <input 
-                      type="email" 
-                      placeholder="email@cliente.com" 
-                      required 
-                      value={emailToShare}
-                      onChange={(e) => setEmailToShare(e.target.value)}
+                      type="email" placeholder="email@cliente.com" required 
+                      value={emailToShare} onChange={(e) => setEmailToShare(e.target.value)}
                       className="flex-1 bg-white border-2 border-slate-200 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:border-[#002855] transition-all shadow-sm"
                     />
                     <button type="submit" className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase hover:bg-black transition-all active:scale-95 shadow-lg">Enviar</button>
                  </form>
               </div>
-              
-              <button 
-                onClick={() => setIsSuccessModalOpen(false)}
-                className="mt-10 text-[10px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors flex items-center gap-2"
-              >
-                Voltar ao Sistema <CheckIcon className="w-3 h-3"/>
-              </button>
+              <button onClick={() => setIsSuccessModalOpen(false)} className="mt-10 text-[10px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors">Voltar ao Sistema</button>
            </div>
         </Modal>
       )}
 
-      {/* OTHER MODALS LOGIC */}
+      {isPurchaseModalOpen && (
+        <Modal title="Lançar Nova Compra / Entrada de Estoque" onClose={() => setIsPurchaseModalOpen(false)}>
+           <div className="mb-6 p-6 bg-red-50 rounded-[2rem] border border-red-200 flex items-center gap-6 shadow-inner">
+              <ShoppingIcon className="w-12 h-12 text-red-600" />
+              <div>
+                 <p className="text-xs font-black uppercase text-red-800 tracking-wider leading-none">Gestão de Abastecimento</p>
+                 <p className="text-[10px] text-red-600 uppercase font-bold mt-2 leading-relaxed">Este lançamento aumentará automaticamente o estoque físico do produto selecionado.</p>
+              </div>
+           </div>
+           <form onSubmit={handlePurchaseEntry} className="space-y-5">
+              <Input label="Produto / Espécie" list="plist-compra" uppercase value={purchaseFormData.productName} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, productName: v})} />
+              <datalist id="plist-compra">{stock.map(s => <option key={s.productName} value={s.productName} />)}</datalist>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Peso Comprado (KG)" type="number" step="0.01" value={purchaseFormData.weightKg} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, weightKg: v})} />
+                <Input label="Preço Custo/KG" type="number" step="0.01" value={purchaseFormData.pricePerKg} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, pricePerKg: v})} />
+              </div>
+              <Input label="Valor Total Pago" type="number" step="0.01" value={purchaseFormData.total} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, total: v})} />
+              <div className="grid grid-cols-2 gap-4">
+                 <Input label="Fornecedor / Origem" uppercase value={purchaseFormData.supplier} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, supplier: v})} />
+                 <Input label="Data da Compra" type="date" value={purchaseFormData.date} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, date: v})} />
+              </div>
+              <PrimaryButton color="red">REGISTRAR ENTRADA NO ESTOQUE</PrimaryButton>
+           </form>
+        </Modal>
+      )}
+
       {isVendaModalOpen && (
         <Modal title="Processar Novo Pedido" onClose={() => setIsVendaModalOpen(false)}>
           <form onSubmit={handleLaunchSale} className="space-y-4">
@@ -661,8 +882,8 @@ const App: React.FC = () => {
            <div className="mb-6 p-6 bg-yellow-50 rounded-3xl border border-yellow-200 flex items-center gap-6 shadow-inner">
               <CreditCardIcon className="w-12 h-12 text-yellow-600" />
               <div>
-                 <p className="text-xs font-black uppercase text-yellow-800">Definição de Teto de Risco</p>
-                 <p className="text-[10px] text-yellow-600 uppercase font-bold mt-1 leading-relaxed">Gerencie quanto este cliente pode comprar a prazo e adicione depósitos antecipados à carteira digital.</p>
+                 <p className="text-xs font-black uppercase text-yellow-800 tracking-wider">Definição de Teto de Risco</p>
+                 <p className="text-[10px] text-yellow-600 uppercase font-bold mt-1 leading-relaxed">Controle o limite de faturamento permitido para este cliente.</p>
               </div>
            </div>
            <form onSubmit={handleCreditUpdate} className="space-y-4">
@@ -715,25 +936,10 @@ const App: React.FC = () => {
            </div>
         </Modal>
       )}
-
-      {isPurchaseModalOpen && (
-        <Modal title="Lançar Compra (Custos)" onClose={() => setIsPurchaseModalOpen(false)}>
-          <form onSubmit={handlePurchaseEntry} className="space-y-4">
-            <Input label="Produto" uppercase value={purchaseFormData.productName} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, productName: v})} />
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Peso (kg)" type="number" step="0.01" value={purchaseFormData.weightKg} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, weightKg: v})} />
-              <Input label="Valor Total Pago" type="number" step="0.01" value={purchaseFormData.total} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, total: v})} />
-            </div>
-            <Input label="Data" type="date" value={purchaseFormData.date} onChange={(v: string) => setPurchaseFormData({...purchaseFormData, date: v})} />
-            <PrimaryButton color="red">Registrar Despesa</PrimaryButton>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 };
 
-// COMPONENTES DE SUPORTE
 const NavItem = ({ label, icon: Icon, active, onClick }: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-8 py-5 relative transition-all group ${active ? 'text-white' : 'text-blue-200/50 hover:text-white hover:bg-white/5'}`}>
     <Icon className={`w-5 h-5 transition-transform ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
@@ -785,8 +991,8 @@ const Modal = ({ title, children, onClose }: any) => (
   <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
     <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-300 border border-white/20">
       <div className="bg-[#002855] p-8 text-white flex justify-between items-center border-b border-white/10 shadow-lg">
-        <h3 className="text-sm font-black uppercase italic text-yellow-400 tracking-wider">{title}</h3>
-        <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 flex justify-center items-center hover:bg-white/20 transition-all active:scale-90">✕</button>
+        <h3 className="text-sm font-black uppercase italic text-yellow-400 tracking-wider leading-none">{title}</h3>
+        <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 flex justify-center items-center hover:bg-white/20 transition-all active:scale-90 leading-none">✕</button>
       </div>
       <div className="p-10 custom-scrollbar overflow-y-auto max-h-[80vh]">{children}</div>
     </div>
