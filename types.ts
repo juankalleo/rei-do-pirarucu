@@ -2,8 +2,10 @@
 export type ViewType = 'dashboard' | 'inventory' | 'customers' | 'reports' | 'purchases';
 
 export interface PaymentRecord {
+  id: string;
   date: string;
   amount: number;
+  method: string;
 }
 
 export interface PurchaseEntry {
@@ -35,7 +37,6 @@ export interface SaleEntry {
   paidAt?: string;
   paidAmount?: number;
   paymentHistory?: PaymentRecord[];
-  // Novos campos para controle de expedição (baixa)
   isDispatched?: boolean;
   dispatchedAt?: string;
 }
@@ -57,14 +58,6 @@ export interface Customer {
   phone?: string;
   priceList: Record<string, number>;
   entries: SaleEntry[];
-}
-
-export interface GlobalStats {
-  totalRevenue: number;
-  totalWeight: number;
-  totalPaid: number;
-  totalPending: number;
-  totalInStock: number;
-  totalInventoryValue: number;
-  customerCount: number;
+  walletBalance: number; // Dinheiro pré-pago ou sobras
+  creditLimit: number;   // Teto de dívida permitido
 }
