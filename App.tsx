@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Customer, SaleEntry, StockItem, ViewType, PurchaseEntry, PaymentRecord } from './types';
+import { Customer, SaleEntry, StockItem, ViewType, PurchaseEntry } from './types';
 import { INITIAL_CUSTOMERS, PRODUCT_SUGGESTIONS } from './constants';
 import { 
   FishIcon, PlusIcon, BoxIcon, CheckIcon, 
@@ -33,19 +33,19 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('pirarucu_customers_v6');
+    const saved = localStorage.getItem('pirarucu_v7_customers');
     return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
   });
   
   const [stock, setStock] = useState<StockItem[]>(() => {
-    const saved = localStorage.getItem('pirarucu_stock_v6');
+    const saved = localStorage.getItem('pirarucu_v7_stock');
     return saved ? JSON.parse(saved) : PRODUCT_SUGGESTIONS.map(p => ({ 
       productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString(), history: []
     }));
   });
 
   const [purchases, setPurchases] = useState<PurchaseEntry[]>(() => {
-    const saved = localStorage.getItem('pirarucu_purchases_v6');
+    const saved = localStorage.getItem('pirarucu_v7_purchases');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -76,9 +76,9 @@ const App: React.FC = () => {
   const [payData, setPayData] = useState({ amount: '', method: 'Pix', date: new Date().toISOString().split('T')[0] });
   const [payError, setPayError] = useState<string | null>(null);
 
-  useEffect(() => localStorage.setItem('pirarucu_customers_v6', JSON.stringify(customers)), [customers]);
-  useEffect(() => localStorage.setItem('pirarucu_stock_v6', JSON.stringify(stock)), [stock]);
-  useEffect(() => localStorage.setItem('pirarucu_purchases_v6', JSON.stringify(purchases)), [purchases]);
+  useEffect(() => localStorage.setItem('pirarucu_v7_customers', JSON.stringify(customers)), [customers]);
+  useEffect(() => localStorage.setItem('pirarucu_v7_stock', JSON.stringify(stock)), [stock]);
+  useEffect(() => localStorage.setItem('pirarucu_v7_purchases', JSON.stringify(purchases)), [purchases]);
 
   const stats = useMemo(() => {
     let rev = 0, rec = 0, pend = 0, kg = 0, saleCount = 0, totalExposure = 0;
@@ -122,12 +122,12 @@ const App: React.FC = () => {
       return { month: monthKey, revenue: mRev, costs: mCosts };
     }).reverse();
 
-    // Insights Lógicos (Inteligência do Negócio)
     const insights = [];
     if (efficiency < 60) insights.push({ type: 'warning', text: "A eficiência de cobrança está baixa. Priorize recebimentos pendentes." });
     if (profit < 0) insights.push({ type: 'error', text: "Custos de compra excedem o faturamento total. Revise margens." });
     
-    const topProd = Object.entries(productRanking).sort((a,b) => b[1].revenue - a[1].revenue)[0];
+    const sortedProducts = Object.entries(productRanking).sort((a,b) => b[1].revenue - a[1].revenue);
+    const topProd = sortedProducts[0];
     if (topProd) insights.push({ type: 'success', text: `O produto "${topProd[0]}" é sua principal fonte de receita (${formatCurrency(topProd[1].revenue)}).` });
 
     const totalWeightInStock = stock.reduce((a,b) => a + (SERVICE_ITEMS.includes(b.productName) ? 0 : b.availableWeight), 0);
@@ -136,7 +136,7 @@ const App: React.FC = () => {
     return { 
       rev, rec, pend, kg, costs, profit, efficiency, ticketMedio, totalExposure,
       topPerformanceCustomers: Object.values(customerRanking).sort((a, b) => b.total - a.total).slice(0, 5),
-      mostProfitableProducts: Object.entries(productRanking).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 10),
+      mostProfitableProducts: sortedProducts.slice(0, 10),
       monthlyData,
       lowStock: stock.filter(i => !SERVICE_ITEMS.includes(i.productName) && i.availableWeight < 50).sort((a,b) => a.availableWeight - b.availableWeight),
       insights,
@@ -545,7 +545,7 @@ const App: React.FC = () => {
                                  </div>
                               </div>
                               <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
-                                 <div className="bg-[#002855] h-full transition-all duration-1000 group-hover:bg-yellow-500" style={{ width: `${(data.revenue / stats.rev) * 100}%` }}></div>
+                                 <div className="bg-[#002855] h-full transition-all duration-1000 group-hover:bg-yellow-500" style={{ width: `${(data.revenue / (stats.rev || 1)) * 100}%` }}></div>
                               </div>
                            </div>
                         ))}
@@ -561,7 +561,7 @@ const App: React.FC = () => {
                                  <span className="w-10 h-10 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center font-black text-xs text-slate-400 group-hover:border-red-400 group-hover:text-red-600 transition-all">{i+1}</span>
                                  <div>
                                     <p className="text-xs font-black uppercase text-[#002855]">{c.name}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Concentra {((c.pending / stats.pend) * 100).toFixed(1)}% do valor pendente</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Concentra {((c.pending / (stats.pend || 1)) * 100).toFixed(1)}% do valor pendente</p>
                                  </div>
                               </div>
                               <div className="text-right">
@@ -849,16 +849,16 @@ const App: React.FC = () => {
               <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
                  <CheckIcon className="w-10 h-10 text-emerald-600" />
               </div>
-              <h3 className="text-2xl font-black text-[#002855] mb-2">{lastSale.customer.name}</h3>
+              <h3 className="text-2xl font-black text-[#002855] mb-2">{lastSale.customer?.name}</h3>
               <div className="bg-slate-50 w-full p-6 rounded-3xl border border-slate-100 mb-8">
                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">VALOR TOTAL</p>
-                 <p className="text-3xl font-black text-[#002855] font-mono">{formatCurrency(lastSale.sale.total)}</p>
+                 <p className="text-3xl font-black text-[#002855] font-mono">{formatCurrency(lastSale.sale?.total)}</p>
               </div>
               <div className="grid grid-cols-2 gap-4 w-full">
                  <button onClick={() => { setOrderToPrint({ customer: lastSale.customer, entries: [lastSale.sale] }); setTimeout(() => window.print(), 500); }} className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition-all">
                     <PrinterIcon className="w-5 h-5 text-yellow-500" /> <span className="text-[10px] font-black uppercase">PDF</span>
                  </button>
-                 <a href={`https://wa.me/?text=Olá ${lastSale.customer.name}, seu pedido na Rei do Pirarucu foi processado: %0A%0A*Item:* ${lastSale.sale.productName}%0A*Total:* ${formatCurrency(lastSale.sale.total)}`} target="_blank" rel="noreferrer" className="p-4 bg-emerald-600 text-white rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all">
+                 <a href={`https://wa.me/?text=Olá ${lastSale.customer?.name}, seu pedido na Rei do Pirarucu foi processado: %0A%0A*Item:* ${lastSale.sale?.productName}%0A*Total:* ${formatCurrency(lastSale.sale?.total)}`} target="_blank" rel="noreferrer" className="p-4 bg-emerald-600 text-white rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all">
                     <UsersIcon className="w-5 h-5" /> <span className="text-[10px] font-black uppercase">Zap</span>
                  </a>
               </div>
