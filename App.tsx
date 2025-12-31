@@ -237,17 +237,31 @@ const App: React.FC = () => {
     const price = Number(purchaseFormData.pricePerKg);
     const total = Number(purchaseFormData.total) || (weight * price);
     const newPurchase: PurchaseEntry = { id: `PUR-${Date.now().toString().slice(-6)}`, productName: pName, weightKg: weight, pricePerKg: price, total, date: purchaseFormData.date, supplier: purchaseFormData.supplier };
+    
     setPurchases(prev => [newPurchase, ...prev]);
+    
     if (!SERVICE_ITEMS.includes(pName)) {
       setStock(prev => {
         const existing = prev.find(s => s.productName === pName);
         if (existing) {
-          return prev.map(s => s.productName === pName ? { ...s, availableWeight: s.availableWeight + weight, basePricePerKg: price || s.basePricePerKg, history: [{ id: Date.now().toString(), type: 'entry', weight, date: purchaseFormData.date, description: `Compra: ${purchaseFormData.supplier || 'Fornecedor'}` }, ...(s.history || [])] } : s);
+          return prev.map(s => s.productName === pName ? { 
+            ...s, 
+            availableWeight: s.availableWeight + weight, 
+            basePricePerKg: price || s.basePricePerKg, 
+            history: [{ id: Date.now().toString(), type: 'entry', weight, date: purchaseFormData.date, description: `Compra: ${purchaseFormData.supplier || 'Fornecedor'}` }, ...(s.history || [])] 
+          } : s);
         } else {
-          return [...prev, { productName: pName, availableWeight: weight, basePricePerKg: price, lastUpdate: new Date().toISOString(), history: [{ id: Date.now().toString(), type: 'entry', weight, date: purchaseFormData.date, description: `Compra Inicial` }] }];
+          return [...prev, { 
+            productName: pName, 
+            availableWeight: weight, 
+            basePricePerKg: price, 
+            lastUpdate: new Date().toISOString(), 
+            history: [{ id: Date.now().toString(), type: 'entry', weight, date: purchaseFormData.date, description: `Compra Inicial` }] 
+          }];
         }
       });
     }
+    
     setIsPurchaseModalOpen(false);
     setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   };
@@ -450,7 +464,6 @@ const App: React.FC = () => {
 
           {activeView === 'reports' && (
             <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in zoom-in-95 duration-700">
-               {/* Header BI */}
                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 pb-8">
                   <div>
                      <h3 className="text-3xl font-black text-[#002855] italic uppercase tracking-tighter">Relatório Inteligente</h3>
@@ -463,7 +476,6 @@ const App: React.FC = () => {
                   </div>
                </div>
 
-               {/* Resumo de Saúde do Negócio */}
                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
                      <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest">Patrimônio em Estoque</h4>
@@ -498,9 +510,7 @@ const App: React.FC = () => {
                   </div>
                </div>
 
-               {/* Detalhamento de Performance */}
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  {/* Ranking Rentabilidade Produtos */}
                   <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-200">
                      <h4 className="text-sm font-black uppercase text-[#002855] italic mb-8 border-b border-slate-100 pb-4">Análise de Receita por Produto</h4>
                      <div className="space-y-6">
@@ -524,7 +534,6 @@ const App: React.FC = () => {
                      </div>
                   </div>
 
-                  {/* Risco e Exposição de Clientes */}
                   <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-200">
                      <h4 className="text-sm font-black uppercase text-red-600 italic mb-8 border-b border-slate-100 pb-4">Ranking de Exposição (Dívida Acumulada)</h4>
                      <div className="space-y-4">
@@ -543,33 +552,6 @@ const App: React.FC = () => {
                               </div>
                            </div>
                         ))}
-                        {stats.customerRiskRanking.length === 0 && <p className="text-center py-20 text-slate-300 font-black uppercase text-xs">Nenhuma pendência ativa</p>}
-                     </div>
-                  </div>
-               </div>
-
-               {/* BI de Compras e Fluxo */}
-               <div className="bg-[#002855] rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 -translate-y-1/2 translate-x-1/2 rounded-full"></div>
-                  <h4 className="text-sm font-black uppercase text-yellow-400 italic mb-10 tracking-widest">Resumo Financeiro Executivo</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-10 relative z-10">
-                     <div>
-                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Margem de Lucro Bruta</p>
-                        <p className={`text-3xl font-black tabular-nums ${stats.profit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                           {stats.rev > 0 ? ((stats.profit / stats.rev) * 100).toFixed(1) : 0}%
-                        </p>
-                     </div>
-                     <div>
-                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Ticket Médio Geral</p>
-                        <p className="text-3xl font-black tabular-nums">{formatCurrency(stats.ticketMedio)}</p>
-                     </div>
-                     <div>
-                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Faturamento / kg</p>
-                        <p className="text-3xl font-black tabular-nums">{stats.kg > 0 ? formatCurrency(stats.rev / stats.kg) : 'R$ 0,00'}</p>
-                     </div>
-                     <div>
-                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Exposição de Crédito</p>
-                        <p className="text-3xl font-black tabular-nums">{formatCurrency(stats.totalExposure)}</p>
                      </div>
                   </div>
                </div>
@@ -605,6 +587,69 @@ const App: React.FC = () => {
         </div>
 
         {/* MODALS */}
+        {isPurchaseModalOpen && (
+          <Modal title="Lançar Nova Compra de Mercadoria" onClose={() => setIsPurchaseModalOpen(false)}>
+             <form onSubmit={handlePurchaseEntry} className="space-y-6">
+                <div>
+                   <Input 
+                      label="Produto / Espécie" 
+                      list="purchaselist" 
+                      uppercase 
+                      required 
+                      value={purchaseFormData.productName} 
+                      onChange={(v: string) => setPurchaseFormData({...purchaseFormData, productName: v})} 
+                   />
+                   <datalist id="purchaselist">
+                      {PRODUCT_SUGGESTIONS.map(s => <option key={s} value={s} />)}
+                   </datalist>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                   <Input 
+                      label="Peso Bruto (kg)" 
+                      type="number" 
+                      step="0.01" 
+                      required 
+                      value={purchaseFormData.weightKg} 
+                      onChange={(v: string) => setPurchaseFormData({...purchaseFormData, weightKg: v})} 
+                   />
+                   <Input 
+                      label="Preço por Quilo (R$)" 
+                      type="number" 
+                      step="0.01" 
+                      required 
+                      value={purchaseFormData.pricePerKg} 
+                      onChange={(v: string) => setPurchaseFormData({...purchaseFormData, pricePerKg: v})} 
+                   />
+                </div>
+
+                <Input 
+                   label="Fornecedor / Origem" 
+                   uppercase 
+                   value={purchaseFormData.supplier} 
+                   onChange={(v: string) => setPurchaseFormData({...purchaseFormData, supplier: v})} 
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                   <Input 
+                      label="Data da Compra" 
+                      type="date" 
+                      value={purchaseFormData.date} 
+                      onChange={(v: string) => setPurchaseFormData({...purchaseFormData, date: v})} 
+                   />
+                   <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 shadow-inner flex flex-col justify-center">
+                      <p className="text-[8px] font-black uppercase text-slate-400 mb-1">Cálculo Total</p>
+                      <p className="text-lg font-black text-[#002855] font-mono">
+                         {formatCurrency(Number(purchaseFormData.weightKg) * Number(purchaseFormData.pricePerKg) || 0)}
+                      </p>
+                   </div>
+                </div>
+
+                <PrimaryButton color="red">Confirmar e Adicionar ao Estoque</PrimaryButton>
+             </form>
+          </Modal>
+        )}
+
         {isDispatchModalOpen && (
           <Modal title="Pagamento / Quitação" onClose={() => setIsDispatchModalOpen(false)}>
              <div className="mb-6 p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
