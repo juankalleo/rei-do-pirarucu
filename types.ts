@@ -46,7 +46,7 @@ export interface StockItem {
   availableWeight: number;
   basePricePerKg: number;
   lastUpdate: string;
-  history?: StockMovement[];
+  history: StockMovement[];
 }
 
 export interface Customer {
@@ -58,6 +58,6 @@ export interface Customer {
   phone?: string;
   priceList: Record<string, number>;
   entries: SaleEntry[];
-  walletBalance: number; // Dinheiro pré-pago ou sobras
-  creditLimit: number;   // Teto de dívida permitido
+  walletBalance: number;
+  creditLimit: number;
 }
