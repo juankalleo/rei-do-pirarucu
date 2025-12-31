@@ -32,21 +32,39 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
+  // Safe initialization from LocalStorage
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('pirarucu_v7_customers');
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
+    try {
+      const saved = localStorage.getItem('pirarucu_v7_customers');
+      return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
+    } catch (e) {
+      console.error("Erro ao carregar clientes do storage:", e);
+      return INITIAL_CUSTOMERS;
+    }
   });
   
   const [stock, setStock] = useState<StockItem[]>(() => {
-    const saved = localStorage.getItem('pirarucu_v7_stock');
-    return saved ? JSON.parse(saved) : PRODUCT_SUGGESTIONS.map(p => ({ 
-      productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString(), history: []
-    }));
+    try {
+      const saved = localStorage.getItem('pirarucu_v7_stock');
+      return saved ? JSON.parse(saved) : PRODUCT_SUGGESTIONS.map(p => ({ 
+        productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString(), history: []
+      }));
+    } catch (e) {
+      console.error("Erro ao carregar estoque do storage:", e);
+      return PRODUCT_SUGGESTIONS.map(p => ({ 
+        productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString(), history: []
+      }));
+    }
   });
 
   const [purchases, setPurchases] = useState<PurchaseEntry[]>(() => {
-    const saved = localStorage.getItem('pirarucu_v7_purchases');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('pirarucu_v7_purchases');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Erro ao carregar compras do storage:", e);
+      return [];
+    }
   });
 
   const SERVICE_ITEMS = ['FRETE', 'CAIXA', 'DEPOSITO'];
@@ -76,9 +94,23 @@ const App: React.FC = () => {
   const [payData, setPayData] = useState({ amount: '', method: 'Pix', date: new Date().toISOString().split('T')[0] });
   const [payError, setPayError] = useState<string | null>(null);
 
-  useEffect(() => localStorage.setItem('pirarucu_v7_customers', JSON.stringify(customers)), [customers]);
-  useEffect(() => localStorage.setItem('pirarucu_v7_stock', JSON.stringify(stock)), [stock]);
-  useEffect(() => localStorage.setItem('pirarucu_v7_purchases', JSON.stringify(purchases)), [purchases]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('pirarucu_v7_customers', JSON.stringify(customers));
+    } catch (e) { console.error("Quota do LocalStorage excedida."); }
+  }, [customers]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pirarucu_v7_stock', JSON.stringify(stock));
+    } catch (e) { console.error("Quota do LocalStorage excedida."); }
+  }, [stock]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pirarucu_v7_purchases', JSON.stringify(purchases));
+    } catch (e) { console.error("Quota do LocalStorage excedida."); }
+  }, [purchases]);
 
   const stats = useMemo(() => {
     let rev = 0, rec = 0, pend = 0, kg = 0, saleCount = 0, totalExposure = 0;
@@ -108,7 +140,7 @@ const App: React.FC = () => {
       });
     });
     
-    const costs = purchases.reduce((a, b) => a + b.total, 0);
+    const costs = purchases.reduce((a, b) => a + (Number(b.total) || 0), 0);
     const profit = rev - costs;
     const efficiency = rev > 0 ? (rec / rev) * 100 : 0;
     const ticketMedio = saleCount > 0 ? rev / saleCount : 0;
@@ -118,7 +150,7 @@ const App: React.FC = () => {
       d.setMonth(d.getMonth() - i);
       const monthKey = d.toISOString().substring(0, 7);
       const mRev = customers.reduce((acc, c) => acc + c.entries.filter(e => e.date.startsWith(monthKey)).reduce((sum, e) => sum + e.total, 0), 0);
-      const mCosts = purchases.filter(p => p.date.startsWith(monthKey)).reduce((sum, p) => sum + p.total, 0);
+      const mCosts = purchases.filter(p => p.date.startsWith(monthKey)).reduce((sum, p) => sum + (Number(p.total) || 0), 0);
       return { month: monthKey, revenue: mRev, costs: mCosts };
     }).reverse();
 
@@ -148,33 +180,38 @@ const App: React.FC = () => {
 
   const handleLaunchSale = (e: React.FormEvent) => {
     e.preventDefault();
-    const weight = Number(formData.weightKg);
-    const pName = formData.productName.toUpperCase().trim();
-    const customer = customers.find(c => c.id === activeCustomerId);
-    const totalVenda = weight * Number(formData.pricePerKg);
-    if (!customer || !pName || weight <= 0) return;
-    if (!SERVICE_ITEMS.includes(pName)) {
-      setStock(prev => prev.map(s => s.productName === pName ? { 
-        ...s, 
-        availableWeight: s.availableWeight - weight,
-        history: [{ id: Date.now().toString(), type: 'exit', weight: -weight, date: formData.date, description: `Venda p/ ${customer.name}` }, ...(s.history || [])]
-      } : s));
+    try {
+      const weight = Number(formData.weightKg);
+      const pName = formData.productName.toUpperCase().trim();
+      const customer = customers.find(c => c.id === activeCustomerId);
+      const totalVenda = weight * Number(formData.pricePerKg);
+      if (!customer || !pName || weight <= 0) return;
+      if (!SERVICE_ITEMS.includes(pName)) {
+        setStock(prev => prev.map(s => s.productName === pName ? { 
+          ...s, 
+          availableWeight: s.availableWeight - weight,
+          history: [{ id: Date.now().toString(), type: 'exit', weight: -weight, date: formData.date, description: `Venda p/ ${customer.name}` }, ...(s.history || [])]
+        } : s));
+      }
+      const newSale: SaleEntry = {
+        id: Math.random().toString(36).substr(2, 9).toUpperCase(),
+        productName: pName,
+        pricePerKg: Number(formData.pricePerKg),
+        weightKg: weight,
+        total: totalVenda,
+        date: formData.date,
+        isPaid: false
+      };
+      setCustomers(prev => prev.map(c => c.id === activeCustomerId ? { ...c, entries: [newSale, ...c.entries] } : c));
+      setIsVendaModalOpen(false);
+      setLastSale({ customer, sale: newSale });
+      setIsSuccessModalOpen(true);
+    } catch (err) {
+      console.error("Erro ao lançar venda:", err);
     }
-    const newSale: SaleEntry = {
-      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
-      productName: pName,
-      pricePerKg: Number(formData.pricePerKg),
-      weightKg: weight,
-      total: totalVenda,
-      date: formData.date,
-      isPaid: false
-    };
-    setCustomers(prev => prev.map(c => c.id === activeCustomerId ? { ...c, entries: [newSale, ...c.entries] } : c));
-    setIsVendaModalOpen(false);
-    setLastSale({ customer, sale: newSale });
-    setIsSuccessModalOpen(true);
   };
 
+  // Resto do código omitido para brevidade, mas mantido íntegro no arquivo real
   const handleAddCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerFormData.name) return;
@@ -594,7 +631,7 @@ const App: React.FC = () => {
                         <td className="p-6 font-black text-[#002855] uppercase">{p.productName}</td>
                         <td className="p-6 text-slate-500 font-bold uppercase">{p.supplier || 'MERCADO'}</td>
                         <td className="p-6 text-right font-black tabular-nums">{p.weightKg} kg</td>
-                        <td className="p-6 text-right text-red-600 font-black tabular-nums">{formatCurrency(p.total)}</td>
+                        <td className="p-6 text-right text-red-600 font-black tabular-nums">{formatCurrency(Number(p.total) || 0)}</td>
                       </tr>
                     ))}
                   </tbody>

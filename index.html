@@ -10,10 +10,9 @@
     <style>
         body { 
             font-family: 'Inter', sans-serif; 
-            background-color: #f1f5f9; /* Slate 100 para contraste superior */
+            background-color: #f1f5f9; 
         }
         
-        /* Custom scrollbar refinado */
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #e2e8f0; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
@@ -27,18 +26,36 @@
             .flex-1 { overflow: visible !important; display: block !important; }
             .bg-white { break-inside: avoid; box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
         }
+
+        #error-fallback {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            padding: 20px;
+        }
     </style>
 <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
 </head>
 <body class="text-slate-900 antialiased">
     <div id="root"></div>
+    <div id="error-fallback">
+        <h1 style="font-size: 24px; font-weight: 800; color: #002855;">Ops! Algo deu errado.</h1>
+        <p style="color: #64748b; margin-top: 10px;">Ocorreu um erro ao carregar o aplicativo. Por favor, tente recarregar a página.</p>
+        <button onclick="location.reload()" style="margin-top: 20px; background: #002855; color: white; padding: 12px 24px; border-radius: 12px; border: none; cursor: pointer; font-weight: bold;">Recarregar Sistema</button>
+    </div>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>
