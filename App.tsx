@@ -401,19 +401,37 @@ const App: React.FC = () => {
                  <button onClick={() => setIsNewProductModalOpen(true)} className="bg-[#002855] text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-blue-900 transition-all active:scale-95"><PlusIcon className="w-4 h-4" /> NOVO PRODUTO</button>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                 {stock.filter(i => !SERVICE_ITEMS.includes(i.productName)).map(item => (
-                   <div key={item.productName} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-col justify-between h-52 group hover:shadow-xl hover:scale-[1.02] transition-all">
-                      <div className="flex justify-between items-start">
-                         <h4 className="text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none">{item.productName}</h4>
-                         <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-slate-100 rounded-lg"><EditIcon className="w-4 h-4 text-[#002855]"/></button>
-                      </div>
-                      <div>
-                         <p className={`text-4xl font-black tabular-nums ${item.availableWeight < 50 ? 'text-red-600' : 'text-slate-900'}`}>{item.availableWeight.toFixed(1)}<span className="text-sm font-bold ml-1 opacity-50">kg</span></p>
-                         <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Custo Médio: {formatCurrency(item.basePricePerKg)}</p>
-                      </div>
-                      <button onClick={() => { setSelectedStockItem(item); setIsHistoryModalOpen(true); }} className="text-[9px] font-black text-slate-400 uppercase text-center border-t border-slate-100 pt-4 hover:text-[#002855] transition-colors">Extrato de Movimentação</button>
-                   </div>
-                 ))}
+                 {stock.filter(i => !SERVICE_ITEMS.includes(i.productName)).map(item => {
+                   const isOutOfStock = item.availableWeight <= 0;
+                   return (
+                     <div 
+                       key={item.productName} 
+                       className={`p-6 rounded-[2.5rem] shadow-sm border transition-all duration-300 flex flex-col justify-between h-52 group hover:shadow-xl hover:scale-[1.02] ${
+                         isOutOfStock 
+                         ? 'bg-red-50 border-red-200 shadow-red-100/20' 
+                         : 'bg-emerald-50 border-emerald-200 shadow-emerald-100/20'
+                       }`}
+                     >
+                        <div className="flex justify-between items-start">
+                           <h4 className={`text-[9px] font-black uppercase tracking-widest leading-none ${isOutOfStock ? 'text-red-400' : 'text-emerald-400'}`}>
+                              {item.productName}
+                           </h4>
+                           <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-white/50 rounded-lg"><EditIcon className="w-4 h-4 text-[#002855]"/></button>
+                        </div>
+                        <div>
+                           <p className={`text-4xl font-black tabular-nums ${isOutOfStock ? 'text-red-600' : 'text-emerald-600'}`}>
+                             {item.availableWeight.toFixed(1)}<span className="text-sm font-bold ml-1 opacity-50">kg</span>
+                           </p>
+                           <p className={`text-[9px] font-bold uppercase mt-1 ${isOutOfStock ? 'text-red-300' : 'text-emerald-400'}`}>
+                             Custo Médio: {formatCurrency(item.basePricePerKg)}
+                           </p>
+                        </div>
+                        <button onClick={() => { setSelectedStockItem(item); setIsHistoryModalOpen(true); }} className={`text-[9px] font-black uppercase text-center border-t pt-4 transition-colors ${isOutOfStock ? 'border-red-100 text-red-400 hover:text-red-700' : 'border-emerald-100 text-emerald-400 hover:text-emerald-700'}`}>
+                           Extrato de Movimentação
+                        </button>
+                     </div>
+                   );
+                 })}
                </div>
             </div>
           )}
