@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Customer, SaleEntry, StockItem, ViewType, PurchaseEntry } from './types';
+import { Customer, SaleEntry, StockItem, ViewType, PurchaseEntry, PaymentRecord } from './types';
 import { INITIAL_CUSTOMERS, PRODUCT_SUGGESTIONS } from './constants';
 import { 
   FishIcon, PlusIcon, BoxIcon, CheckIcon, 
@@ -62,18 +62,20 @@ const App: React.FC = () => {
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
 
   const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null);
+  const [activePartialEntryId, setActivePartialEntryId] = useState<string | null>(null);
   const [lastSale, setLastSale] = useState<{customer: Customer, sale: SaleEntry} | null>(null);
   const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null);
   const [orderToPrint, setOrderToPrint] = useState<{customer: Customer, entries: SaleEntry[]} | null>(null);
-  const [dispatchSelection, setDispatchSelection] = useState<{cid: string, eids: string[]} | null>(null);
-
+  
   const [formData, setFormData] = useState({ productName: '', pricePerKg: '', weightKg: '', date: new Date().toISOString().split('T')[0] });
   const [stockFormData, setStockFormData] = useState({ name: '', weight: '', price: '' });
   const [purchaseFormData, setPurchaseFormData] = useState({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   const [creditFormData, setCreditFormData] = useState({ limit: '', walletAdd: '' });
   const [customerFormData, setCustomerFormData] = useState({ name: '', taxId: '', phone: '', address: '' });
   const [newProductFormData, setNewProductFormData] = useState({ name: '', weight: '', price: '' });
-  
+  const [payData, setPayData] = useState({ amount: '', method: 'Pix', date: new Date().toISOString().split('T')[0] });
+  const [payError, setPayError] = useState<string | null>(null);
+
   useEffect(() => localStorage.setItem('pirarucu_customers_v6', JSON.stringify(customers)), [customers]);
   useEffect(() => localStorage.setItem('pirarucu_stock_v6', JSON.stringify(stock)), [stock]);
   useEffect(() => localStorage.setItem('pirarucu_purchases_v6', JSON.stringify(purchases)), [purchases]);
@@ -239,6 +241,47 @@ const App: React.FC = () => {
     setIsCreditModalOpen(false);
   };
 
+  const handlePartialPaymentSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(payData.amount);
+    if (isNaN(amount) || amount <= 0) return;
+
+    const customer = customers.find(c => c.id === activeCustomerId);
+    const entry = customer?.entries.find(ent => ent.id === activePartialEntryId);
+    
+    if (!entry) return;
+
+    const pending = entry.total - (entry.paidAmount || 0);
+    
+    if (amount > pending + 0.01) { // 0.01 for floating point safety
+      setPayError(`Erro: O valor inserido (${formatCurrency(amount)}) excede o saldo devedor desta venda (${formatCurrency(pending)}).`);
+      return;
+    }
+
+    setPayError(null);
+    setCustomers(prev => prev.map(c => {
+      if (c.id !== activeCustomerId) return c;
+      return {
+        ...c,
+        entries: c.entries.map(ent => {
+          if (ent.id !== activePartialEntryId) return ent;
+          const newPaidAmount = (ent.paidAmount || 0) + amount;
+          const isFullyPaid = newPaidAmount >= ent.total - 0.01;
+          return {
+            ...ent,
+            paidAmount: newPaidAmount,
+            isPaid: isFullyPaid,
+            paidAt: isFullyPaid ? payData.date : ent.paidAt,
+            paymentHistory: [...(ent.paymentHistory || []), { id: Date.now().toString(), date: payData.date, amount, method: payData.method }]
+          };
+        })
+      };
+    }));
+    
+    setIsDispatchModalOpen(false);
+    setActivePartialEntryId(null);
+  };
+
   return (
     <div className="flex min-h-screen bg-[#f1f5f9] font-['Inter']">
       <aside className={`fixed md:relative inset-y-0 left-0 w-72 bg-[#002855] text-white flex flex-col shadow-2xl z-50 transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
@@ -266,7 +309,6 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar print:hidden">
           {activeView === 'dashboard' && (
              <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700">
-                {/* Top KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                    <DashCard label="Faturamento Total" val={formatCurrency(stats.rev)} subLabel={`${stats.efficiency.toFixed(1)}% Eficiência`} color="blue" />
                    <DashCard label="Lucro Bruto Est." val={formatCurrency(stats.profit)} subLabel="Rev - Compras" color="emerald" />
@@ -274,9 +316,7 @@ const App: React.FC = () => {
                    <DashCard label="Volume Vendido" val={`${stats.kg.toFixed(0)} kg`} subLabel="Itens Físicos" color="red" />
                 </div>
 
-                {/* Charts and Lists Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                   {/* Monthly Growth Chart */}
                    <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
                       <div className="flex justify-between items-center mb-8">
                          <h3 className="text-sm font-black uppercase text-[#002855] italic">Fluxo de Caixa (Últimos 6 meses)</h3>
@@ -307,7 +347,6 @@ const App: React.FC = () => {
                       </div>
                    </div>
 
-                   {/* Low Stock Alerts */}
                    <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
                       <h3 className="text-sm font-black uppercase text-[#002855] italic mb-6">Alertas de Reposição</h3>
                       <div className="space-y-4">
@@ -324,45 +363,6 @@ const App: React.FC = () => {
                          ))}
                       </div>
                       <button onClick={() => setActiveView('inventory')} className="w-full mt-6 py-4 bg-slate-100 rounded-2xl text-[10px] font-black uppercase text-slate-500 hover:bg-slate-200 transition-all">Ver Estoque Completo</button>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                   {/* Top Customers */}
-                   <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
-                      <h3 className="text-sm font-black uppercase text-[#002855] italic mb-6">Ranking de Clientes (TOP 5)</h3>
-                      <div className="space-y-3">
-                         {stats.topPerformanceCustomers.map((c, i) => (
-                           <div key={i} className="flex items-center gap-4 p-4 hover:bg-slate-50 rounded-2xl transition-all">
-                              <span className="w-8 h-8 rounded-full bg-[#002855] text-white flex items-center justify-center font-black text-xs">{i+1}</span>
-                              <div className="flex-1">
-                                 <p className="text-xs font-black uppercase text-[#002855]">{c.name}</p>
-                                 <p className="text-[9px] font-bold text-slate-400 uppercase">{c.sales} pedidos faturados</p>
-                              </div>
-                              <p className="text-sm font-black text-slate-900 tabular-nums">{formatCurrency(c.total)}</p>
-                           </div>
-                         ))}
-                      </div>
-                   </div>
-
-                   {/* Top Products */}
-                   <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
-                      <h3 className="text-sm font-black uppercase text-[#002855] italic mb-6">Produtos Mais Vendidos (Faturamento)</h3>
-                      <div className="space-y-3">
-                         {stats.mostProfitableProducts.map(([name, d], i) => (
-                           <div key={i} className="flex items-center gap-4 p-4 hover:bg-slate-50 rounded-2xl transition-all">
-                              <div className="flex-1">
-                                 <div className="flex justify-between mb-1">
-                                    <p className="text-xs font-black uppercase text-[#002855]">{name}</p>
-                                    <p className="text-xs font-black text-slate-900">{formatCurrency(d.revenue)}</p>
-                                 </div>
-                                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                    <div className="bg-yellow-500 h-full" style={{ width: `${(d.revenue / stats.rev) * 100}%` }}></div>
-                                 </div>
-                              </div>
-                           </div>
-                         ))}
-                      </div>
                    </div>
                 </div>
              </div>
@@ -406,9 +406,30 @@ const App: React.FC = () => {
                      onDeleteCustomer={(id) => { if(window.confirm("Deseja realmente excluir este cliente e todo seu histórico?")) setCustomers(prev => prev.filter(x => x.id !== id)); }}
                      onDeleteEntry={(cid, eid) => setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.filter(e => e.id !== eid) } : cust))}
                      onTogglePayment={(cid, eid) => setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.map(e => e.id === eid ? { ...e, isPaid: !e.isPaid } : e) } : cust))}
-                     onPartialPayment={() => setIsDispatchModalOpen(true)}
+                     onPartialPayment={(cid, eid) => {
+                        const cust = customers.find(x => x.id === cid);
+                        const ent = cust?.entries.find(e => e.id === eid);
+                        if (ent) {
+                           setActiveCustomerId(cid);
+                           setActivePartialEntryId(eid);
+                           setPayData({ ...payData, amount: (ent.total - (ent.paidAmount || 0)).toString() });
+                           setPayError(null);
+                           setIsDispatchModalOpen(true);
+                        }
+                     }}
                      onPrintOrder={(ents) => { setOrderToPrint({ customer: c, entries: ents }); setTimeout(() => window.print(), 500); }}
-                     onDispatch={() => setIsDispatchModalOpen(true)}
+                     onDispatch={(cid, eids) => {
+                        // Multi-dispatch logic can go here, using first for now
+                        const cust = customers.find(x => x.id === cid);
+                        const ent = cust?.entries.find(e => e.id === eids[0]);
+                        if (ent) {
+                           setActiveCustomerId(cid);
+                           setActivePartialEntryId(eids[0]);
+                           setPayData({ ...payData, amount: (ent.total - (ent.paidAmount || 0)).toString() });
+                           setPayError(null);
+                           setIsDispatchModalOpen(true);
+                        }
+                     }}
                      onManageCredit={(id) => { setActiveCustomerId(id); setIsCreditModalOpen(true); }}
                    />
                  ))}
@@ -428,9 +449,7 @@ const App: React.FC = () => {
                     <tr><th className="p-6">Data</th><th className="p-6">Produto</th><th className="p-6">Origem/Fornecedor</th><th className="p-6 text-right">Peso</th><th className="p-6 text-right">Custo Total</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {purchases.length === 0 ? (
-                      <tr><td colSpan={5} className="p-20 text-center font-bold text-slate-300 uppercase text-[10px] tracking-widest">Nenhuma compra registrada</td></tr>
-                    ) : purchases.map(p => (
+                    {purchases.map(p => (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="p-6 text-slate-500 font-bold">{new Date(p.date).toLocaleDateString()}</td>
                         <td className="p-6 font-black text-[#002855] uppercase">{p.productName}</td>
@@ -447,6 +466,60 @@ const App: React.FC = () => {
         </div>
 
         {/* MODALS */}
+        {isDispatchModalOpen && (
+          <Modal title="Pagamento / Quitação" onClose={() => setIsDispatchModalOpen(false)}>
+             <div className="mb-6 p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
+                <p className="text-[10px] font-black uppercase text-emerald-800 tracking-widest mb-1">Dívida Selecionada</p>
+                {activePartialEntryId && (() => {
+                   const c = customers.find(x => x.id === activeCustomerId);
+                   const e = c?.entries.find(ent => ent.id === activePartialEntryId);
+                   return e ? (
+                      <div className="flex justify-between items-end">
+                         <div>
+                            <p className="text-sm font-black text-[#002855] uppercase leading-none">{e.productName}</p>
+                            <p className="text-[9px] font-bold text-slate-400 mt-1">EMITIDO EM {new Date(e.date).toLocaleDateString()}</p>
+                         </div>
+                         <p className="text-lg font-black text-slate-900 tabular-nums">{formatCurrency(e.total - (e.paidAmount || 0))}</p>
+                      </div>
+                   ) : null;
+                })()}
+             </div>
+
+             <form onSubmit={handlePartialPaymentSubmit} className="space-y-6">
+                <div>
+                   <Input 
+                      label="Valor do Recebimento (R$)" 
+                      type="number" 
+                      step="0.01" 
+                      required 
+                      value={payData.amount} 
+                      onChange={(v: string) => { setPayData({...payData, amount: v}); setPayError(null); }} 
+                   />
+                   {payError && <p className="mt-2 text-[10px] font-bold text-red-600 uppercase px-4">{payError}</p>}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-4">Meio de Pagto</label>
+                      <select 
+                         className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-5 font-bold text-sm outline-none focus:border-[#002855] transition-all shadow-inner"
+                         value={payData.method}
+                         onChange={e => setPayData({...payData, method: e.target.value})}
+                      >
+                         <option>Pix</option>
+                         <option>Dinheiro</option>
+                         <option>Cartão</option>
+                         <option>Depósito</option>
+                      </select>
+                   </div>
+                   <Input label="Data do Recebimento" type="date" value={payData.date} onChange={(v: string) => setPayData({...payData, date: v})} />
+                </div>
+
+                <PrimaryButton color="emerald">Confirmar Recebimento</PrimaryButton>
+             </form>
+          </Modal>
+        )}
+
         {isCustomerModalOpen && (
           <Modal title="Cadastrar Novo Cliente" onClose={() => setIsCustomerModalOpen(false)}>
             <form onSubmit={handleAddCustomer} className="space-y-6">
@@ -498,9 +571,7 @@ const App: React.FC = () => {
         {isHistoryModalOpen && selectedStockItem && (
           <Modal title={`Histórico: ${selectedStockItem.productName}`} onClose={() => setIsHistoryModalOpen(false)}>
              <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
-                {selectedStockItem.history.length === 0 ? (
-                   <p className="text-center py-10 text-slate-400 font-bold uppercase text-[10px] tracking-widest">Sem movimentações recentes</p>
-                ) : selectedStockItem.history.map((m, idx) => (
+                {selectedStockItem.history.map((m, idx) => (
                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
                       <div>
                          <p className="text-[10px] font-black uppercase text-[#002855] leading-none mb-1">{m.description}</p>
@@ -528,39 +599,25 @@ const App: React.FC = () => {
           </Modal>
         )}
 
-        {/* PRINT VIEW */}
         {orderToPrint && (
           <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-10 text-black">
              <div className="border-[12px] border-[#002855] p-10 rounded-[3rem] relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#002855] opacity-5 -translate-y-1/2 translate-x-1/2 rounded-full"></div>
                 <div className="flex justify-between items-center border-b-4 border-[#002855] pb-8 mb-10">
                    <div>
                       <h1 className="text-6xl font-black italic uppercase text-[#002855]">REI DO <span className="text-yellow-500">PIRARUCU</span></h1>
                       <p className="text-[11px] font-black uppercase tracking-[0.5em] text-slate-400 mt-2">Pescados e Frutos do Mar Amazônicos</p>
                    </div>
                    <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">DATA DE EMISSÃO</p>
                       <p className="text-2xl font-black">{new Date().toLocaleDateString('pt-BR')}</p>
                    </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-10 mb-12">
-                   <div className="bg-slate-50 p-6 rounded-3xl">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">DADOS DO CLIENTE</p>
-                      <p className="text-3xl font-black uppercase text-[#002855]">{orderToPrint.customer.name}</p>
-                      <p className="text-sm font-bold text-slate-500 mt-1 uppercase tracking-widest">{orderToPrint.customer.taxId || 'CONSIGNADO'}</p>
-                   </div>
-                   <div className="flex flex-col justify-end text-right">
-                      <div className="inline-block bg-yellow-400 p-4 rounded-2xl shadow-lg">
-                         <p className="text-[9px] font-black text-yellow-900 uppercase tracking-widest">STATUS DO PEDIDO</p>
-                         <p className="text-xl font-black text-white italic">Faturamento em Carteira</p>
-                      </div>
-                   </div>
+                <div className="bg-slate-50 p-6 rounded-3xl mb-8">
+                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">CLIENTE</p>
+                   <p className="text-3xl font-black uppercase text-[#002855]">{orderToPrint.customer.name}</p>
                 </div>
-
                 <table className="w-full text-left border-collapse rounded-3xl overflow-hidden shadow-sm">
                    <thead className="bg-[#002855] text-white uppercase text-[10px] font-black tracking-widest">
-                      <tr><th className="p-6">Descrição do Item</th><th className="p-6 text-center">Peso Bruto (kg)</th><th className="p-6 text-right">Vlr Unit.</th><th className="p-6 text-right">Valor Total</th></tr>
+                      <tr><th className="p-6">Descrição</th><th className="p-6 text-center">Peso (kg)</th><th className="p-6 text-right">Unit.</th><th className="p-6 text-right">Total</th></tr>
                    </thead>
                    <tbody className="divide-y-2 divide-slate-100">
                       {orderToPrint.entries.map(e => (
@@ -574,26 +631,16 @@ const App: React.FC = () => {
                    </tbody>
                    <tfoot>
                       <tr className="bg-slate-900 text-white">
-                         <td colSpan={3} className="p-10 text-right text-2xl font-black uppercase italic tracking-tighter text-yellow-400">TOTAL GERAL DO PEDIDO:</td>
+                         <td colSpan={3} className="p-10 text-right text-2xl font-black uppercase italic tracking-tighter text-yellow-400">TOTAL DO PEDIDO:</td>
                          <td className="p-10 text-right text-4xl font-black text-white font-mono">{formatCurrency(orderToPrint.entries.reduce((a, b) => a + b.total, 0))}</td>
                       </tr>
                    </tfoot>
                 </table>
-
-                <div className="mt-20 flex justify-between gap-10">
-                   <div className="flex-1 border-t-2 border-slate-300 pt-4 text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">ASSINATURA DO CLIENTE / RECEBEDOR</p>
-                   </div>
-                   <div className="flex-1 border-t-2 border-slate-300 pt-4 text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CONFERIDO POR: LOGÍSTICA REI DO PIRARUCU</p>
-                   </div>
-                </div>
              </div>
           </div>
         )}
       </main>
 
-      {/* Success Modal */}
       {isSuccessModalOpen && lastSale && (
         <Modal title="Venda Processada!" onClose={() => setIsSuccessModalOpen(false)}>
            <div className="flex flex-col items-center text-center">
@@ -601,13 +648,10 @@ const App: React.FC = () => {
                  <CheckIcon className="w-10 h-10 text-emerald-600" />
               </div>
               <h3 className="text-2xl font-black text-[#002855] mb-2">{lastSale.customer.name}</h3>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Pedido Emitido com Sucesso</p>
-              
               <div className="bg-slate-50 w-full p-6 rounded-3xl border border-slate-100 mb-8">
                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">VALOR TOTAL</p>
                  <p className="text-3xl font-black text-[#002855] font-mono">{formatCurrency(lastSale.sale.total)}</p>
               </div>
-
               <div className="grid grid-cols-2 gap-4 w-full">
                  <button onClick={() => { setOrderToPrint({ customer: lastSale.customer, entries: [lastSale.sale] }); setTimeout(() => window.print(), 500); }} className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition-all">
                     <PrinterIcon className="w-5 h-5 text-yellow-500" /> <span className="text-[10px] font-black uppercase">PDF</span>
@@ -633,15 +677,9 @@ const NavItem = ({ label, icon: Icon, active, onClick }: any) => (
 );
 
 const DashCard = ({ label, val, subLabel, color }: any) => {
-  const styles: any = {
-    blue: "border-blue-500 bg-blue-50/20",
-    red: "border-red-500 bg-red-50/20",
-    emerald: "border-emerald-500 bg-emerald-50/20",
-    yellow: "border-yellow-500 bg-yellow-50/20"
-  };
+  const styles: any = { blue: "border-blue-500", emerald: "border-emerald-500", yellow: "border-yellow-500", red: "border-red-500" };
   return (
-    <div className={`p-8 rounded-[2.5rem] border-t-8 bg-white shadow-sm border-slate-200 transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden group`}>
-       <div className={`absolute top-0 left-0 w-1.5 h-full ${styles[color].split(' ')[0]}`}></div>
+    <div className={`p-8 rounded-[2.5rem] border-t-8 bg-white shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden group ${styles[color]}`}>
        <p className="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">{label}</p>
        <p className="text-2xl font-black text-slate-900 tabular-nums">{val}</p>
        <p className="text-[9px] font-bold text-slate-400 uppercase mt-2 tracking-tighter">{subLabel}</p>
@@ -675,10 +713,14 @@ const Input = ({ label, uppercase, ...props }: any) => (
   </div>
 );
 
-const PrimaryButton = ({ children, color = 'blue' }: any) => (
-  <button type="submit" className={`w-full ${color === 'blue' ? 'bg-[#002855] hover:bg-blue-900' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-6 rounded-2xl uppercase text-[11px] shadow-xl hover:shadow-2xl mt-4 active:scale-95 transition-all tracking-[0.2em]`}>
-    {children}
-  </button>
-);
+// Correctly handle block-body with curly braces for components with logic
+const PrimaryButton = ({ children, color = 'blue' }: any) => {
+  const bg = color === 'blue' ? 'bg-[#002855] hover:bg-blue-900' : color === 'red' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700';
+  return (
+    <button type="submit" className={`w-full ${bg} text-white font-black py-6 rounded-2xl uppercase text-[11px] shadow-xl hover:shadow-2xl mt-4 active:scale-95 transition-all tracking-[0.2em]`}>
+      {children}
+    </button>
+  );
+};
 
 export default App;
