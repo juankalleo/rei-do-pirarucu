@@ -94,6 +94,28 @@ const App: React.FC = () => {
   const [payData, setPayData] = useState({ amount: '', method: 'Pix', date: new Date().toISOString().split('T')[0] });
   const [payError, setPayError] = useState<string | null>(null);
 
+  // Lock body scroll when sidebar is open on mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsSidebarOpen(false);
+        document.body.style.overflow = "auto";
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    
+    if (isSidebarOpen && window.innerWidth < 768) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.body.style.overflow = "auto";
+    };
+  }, [isSidebarOpen]);
+
   useEffect(() => {
     try {
       localStorage.setItem('pirarucu_v7_customers', JSON.stringify(customers));
@@ -211,7 +233,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Resto do código omitido para brevidade, mas mantido íntegro no arquivo real
   const handleAddCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerFormData.name) return;
@@ -344,32 +365,55 @@ const App: React.FC = () => {
     setActivePartialEntryId(null);
   };
 
+  const navigateTo = (view: ViewType) => {
+    setActiveView(view);
+    setIsSidebarOpen(false);
+  };
+
   return (
-    <div className="flex min-h-screen bg-[#f1f5f9] font-['Inter']">
-      <aside className={`fixed md:relative inset-y-0 left-0 w-72 bg-[#002855] text-white flex flex-col shadow-2xl z-50 transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="p-8 border-b border-white/10"><BrandLogo /></div>
+    <div className="flex min-h-screen bg-[#f1f5f9] font-['Inter'] w-full max-w-full overflow-x-hidden">
+      {/* MOBILE BACKDROP */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[55] md:hidden transition-opacity duration-300 ease-in-out"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR DRAWER */}
+      <aside className={`fixed md:relative inset-y-0 left-0 w-[min(80vw,320px)] md:w-72 bg-[#002855] text-white flex flex-col shadow-2xl z-[60] transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="p-8 border-b border-white/10 flex justify-between items-start">
+          <BrandLogo />
+          {/* MOBILE CLOSE BUTTON */}
+          <button 
+            onClick={() => setIsSidebarOpen(false)} 
+            className="md:hidden p-2 text-white/40 hover:text-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
         <nav className="flex-1 mt-6 overflow-y-auto custom-scrollbar">
-          <NavItem label="Dashboard" icon={LayoutIcon} active={activeView === 'dashboard'} onClick={() => setActiveView('dashboard')} />
-          <NavItem label="Estoque Físico" icon={BoxIcon} active={activeView === 'inventory'} onClick={() => setActiveView('inventory')} />
-          <NavItem label="Compras" icon={ShoppingIcon} active={activeView === 'purchases'} onClick={() => setActiveView('purchases')} />
-          <NavItem label="Clientes" icon={UsersIcon} active={activeView === 'customers'} onClick={() => setActiveView('customers')} />
-          <NavItem label="Relatório Inteligente" icon={ChartIcon} active={activeView === 'reports'} onClick={() => setActiveView('reports')} />
+          <NavItem label="Dashboard" icon={LayoutIcon} active={activeView === 'dashboard'} onClick={() => navigateTo('dashboard')} />
+          <NavItem label="Estoque Físico" icon={BoxIcon} active={activeView === 'inventory'} onClick={() => navigateTo('inventory')} />
+          <NavItem label="Compras" icon={ShoppingIcon} active={activeView === 'purchases'} onClick={() => navigateTo('purchases')} />
+          <NavItem label="Clientes" icon={UsersIcon} active={activeView === 'customers'} onClick={() => navigateTo('customers')} />
+          <NavItem label="Relatório Inteligente" icon={ChartIcon} active={activeView === 'reports'} onClick={() => navigateTo('reports')} />
         </nav>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-20 px-8 flex items-center justify-between border-b bg-white/95 backdrop-blur-md z-40 print:hidden">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-2"><LayoutIcon className="w-6 h-6 text-[#002855]"/></button>
-            <h2 className="text-xl font-black text-[#002855] uppercase italic">Central <span className="text-yellow-500">Operacional</span></h2>
+      <main className="flex-1 flex flex-col h-screen overflow-hidden w-full max-w-full">
+        <header className="min-h-[5rem] h-auto py-4 md:py-0 px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b bg-white/95 backdrop-blur-md z-40 print:hidden w-full max-w-full overflow-hidden">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 shrink-0 hover:bg-slate-100 rounded-lg transition-colors"><LayoutIcon className="w-6 h-6 text-[#002855]"/></button>
+            <h2 className="text-lg md:text-xl font-black text-[#002855] uppercase italic truncate flex-1 min-w-0">Central <span className="text-yellow-500">Operacional</span></h2>
           </div>
-          <div className="flex gap-8">
+          <div className="flex flex-row flex-wrap gap-4 md:gap-8 w-full md:w-auto justify-between md:justify-end">
             <Stat label="Recebido Real" val={formatCurrency(stats.rec)} color="text-emerald-600" />
             <Stat label="Pendência Bruta" val={formatCurrency(stats.pend)} color="text-red-600" />
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar print:hidden">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar print:hidden w-full max-w-full">
           {activeView === 'dashboard' && (
              <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -380,15 +424,15 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                   <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
-                      <div className="flex justify-between items-center mb-8">
+                   <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar">
+                      <div className="flex justify-between items-center mb-8 min-w-[300px]">
                          <h3 className="text-sm font-black uppercase text-[#002855] italic">Fluxo de Caixa (Últimos 6 meses)</h3>
                          <div className="flex gap-4">
                             <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#002855] rounded-full"></div><span className="text-[10px] font-bold text-slate-400">VENDAS</span></div>
                             <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-400 rounded-full"></div><span className="text-[10px] font-bold text-slate-400">CUSTOS</span></div>
                          </div>
                       </div>
-                      <div className="h-64 flex items-end gap-4 px-2">
+                      <div className="h-64 flex items-end gap-4 px-2 min-w-[400px]">
                          {stats.monthlyData.map((d, i) => {
                            const maxVal = Math.max(...stats.monthlyData.map(m => Math.max(m.revenue, m.costs)), 1);
                            const hRev = (d.revenue / maxVal) * 100;
@@ -417,11 +461,11 @@ const App: React.FC = () => {
                             <p className="text-xs text-slate-400 font-bold uppercase py-10 text-center">Tudo abastecido!</p>
                          ) : stats.lowStock.slice(0, 5).map(item => (
                             <div key={item.productName} className="flex justify-between items-center p-4 bg-red-50 rounded-2xl border border-red-100">
-                               <div>
-                                  <p className="text-[10px] font-black text-red-900 uppercase leading-none mb-1">{item.productName}</p>
+                               <div className="min-w-0 flex-1">
+                                  <p className="text-[10px] font-black text-red-900 uppercase leading-none mb-1 truncate">{item.productName}</p>
                                   <p className="text-[9px] font-bold text-red-400">Abaixo de 50kg</p>
                                </div>
-                               <span className="text-lg font-black text-red-600 tabular-nums">{item.availableWeight.toFixed(1)} <span className="text-[10px]">kg</span></span>
+                               <span className="text-lg font-black text-red-600 tabular-nums shrink-0 ml-2">{item.availableWeight.toFixed(1)} <span className="text-[10px]">kg</span></span>
                             </div>
                          ))}
                       </div>
@@ -433,11 +477,11 @@ const App: React.FC = () => {
 
           {activeView === 'inventory' && (
             <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-               <div className="flex justify-between items-center">
+               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <h3 className="text-2xl font-black text-[#002855] italic">Gestão de Inventário</h3>
-                 <button onClick={() => setIsNewProductModalOpen(true)} className="bg-[#002855] text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-blue-900 transition-all active:scale-95"><PlusIcon className="w-4 h-4" /> NOVO PRODUTO</button>
+                 <button onClick={() => setIsNewProductModalOpen(true)} className="w-full sm:w-auto bg-[#002855] text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:bg-blue-900 transition-all active:scale-95"><PlusIcon className="w-4 h-4" /> NOVO PRODUTO</button>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                  {stock.filter(i => !SERVICE_ITEMS.includes(i.productName)).map(item => {
                    const isOutOfStock = item.availableWeight <= 0;
                    return (
@@ -450,16 +494,16 @@ const App: React.FC = () => {
                        }`}
                      >
                         <div className="flex justify-between items-start">
-                           <h4 className={`text-[9px] font-black uppercase tracking-widest leading-none ${isOutOfStock ? 'text-red-400' : 'text-emerald-400'}`}>
+                           <h4 className={`text-[9px] font-black uppercase tracking-widest leading-none flex-1 min-w-0 truncate pr-2 ${isOutOfStock ? 'text-red-400' : 'text-emerald-400'}`}>
                               {item.productName}
                            </h4>
-                           <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-white/50 rounded-lg"><EditIcon className="w-4 h-4 text-[#002855]"/></button>
+                           <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="p-2 hover:bg-white/50 rounded-lg shrink-0"><EditIcon className="w-4 h-4 text-[#002855]"/></button>
                         </div>
-                        <div>
-                           <p className={`text-4xl font-black tabular-nums ${isOutOfStock ? 'text-red-600' : 'text-emerald-600'}`}>
+                        <div className="min-w-0">
+                           <p className={`text-4xl font-black tabular-nums truncate ${isOutOfStock ? 'text-red-600' : 'text-emerald-600'}`}>
                              {item.availableWeight.toFixed(1)}<span className="text-sm font-bold ml-1 opacity-50">kg</span>
                            </p>
-                           <p className={`text-[9px] font-bold uppercase mt-1 ${isOutOfStock ? 'text-red-300' : 'text-emerald-400'}`}>
+                           <p className={`text-[9px] font-bold uppercase mt-1 truncate ${isOutOfStock ? 'text-red-300' : 'text-emerald-400'}`}>
                              Custo Médio: {formatCurrency(item.basePricePerKg)}
                            </p>
                         </div>
@@ -475,9 +519,9 @@ const App: React.FC = () => {
 
           {activeView === 'customers' && (
             <div className="max-w-[1400px] mx-auto space-y-6 animate-in fade-in duration-500">
-               <div className="flex justify-between items-center">
+               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <h3 className="text-2xl font-black text-[#002855] italic">Painel de Clientes</h3>
-                 <button onClick={() => setIsCustomerModalOpen(true)} className="bg-[#002855] text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-blue-900 transition-all active:scale-95"><PlusIcon className="w-4 h-4" /> CADASTRAR CLIENTE</button>
+                 <button onClick={() => setIsCustomerModalOpen(true)} className="w-full sm:w-auto bg-[#002855] text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:bg-blue-900 transition-all active:scale-95"><PlusIcon className="w-4 h-4" /> CADASTRAR CLIENTE</button>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                  {customers.map(c => (
@@ -521,11 +565,11 @@ const App: React.FC = () => {
             <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in zoom-in-95 duration-700">
                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 pb-8">
                   <div>
-                     <h3 className="text-3xl font-black text-[#002855] italic uppercase tracking-tighter">Relatório Inteligente</h3>
+                     <h3 className="text-2xl md:text-3xl font-black text-[#002855] italic uppercase tracking-tighter">Relatório Inteligente</h3>
                      <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Análise de Performance e Saúde do Negócio</p>
                   </div>
                   <div className="flex gap-4">
-                     <button onClick={() => window.print()} className="bg-white border-2 border-slate-200 p-4 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase">
+                     <button onClick={() => window.print()} className="w-full md:w-auto bg-white border-2 border-slate-200 p-4 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-2 font-black text-[10px] uppercase">
                         <PrinterIcon className="w-4 h-4" /> Exportar Relatório
                      </button>
                   </div>
@@ -534,13 +578,13 @@ const App: React.FC = () => {
                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
                      <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest">Patrimônio em Estoque</h4>
-                     <p className="text-3xl font-black text-[#002855] tabular-nums">{formatCurrency(stats.stockAssetValue)}</p>
+                     <p className="text-2xl md:text-3xl font-black text-[#002855] tabular-nums break-words">{formatCurrency(stats.stockAssetValue)}</p>
                      <p className="text-xs font-bold text-slate-400 mt-2 uppercase">{stats.totalWeightInStock.toFixed(0)} kg de mercadoria física</p>
                   </div>
                   <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
                      <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest">Eficiência de Recebimento</h4>
                      <div className="flex items-end gap-4">
-                        <p className="text-3xl font-black text-emerald-600 tabular-nums">{stats.efficiency.toFixed(1)}%</p>
+                        <p className="text-2xl md:text-3xl font-black text-emerald-600 tabular-nums shrink-0">{stats.efficiency.toFixed(1)}%</p>
                         <div className="flex-1 bg-slate-100 h-2 rounded-full mb-3 overflow-hidden">
                            <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${stats.efficiency}%` }}></div>
                         </div>
@@ -558,7 +602,7 @@ const App: React.FC = () => {
                               ins.type === 'warning' ? 'bg-yellow-50 border-yellow-100 text-yellow-700' : 
                               'bg-emerald-50 border-emerald-100 text-emerald-700'
                            }`}>
-                              <span className="mt-0.5">•</span> {ins.text}
+                              <span className="mt-0.5 shrink-0">•</span> {ins.text}
                            </div>
                         ))}
                      </div>
@@ -566,19 +610,19 @@ const App: React.FC = () => {
                </div>
 
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-200">
+                  <div className="bg-white rounded-[3rem] p-6 md:p-10 shadow-sm border border-slate-200">
                      <h4 className="text-sm font-black uppercase text-[#002855] italic mb-8 border-b border-slate-100 pb-4">Análise de Receita por Produto</h4>
                      <div className="space-y-6">
                         {stats.mostProfitableProducts.map(([name, data], i) => (
                            <div key={i} className="group">
-                              <div className="flex justify-between items-end mb-2">
-                                 <div>
-                                    <span className="text-[10px] font-black text-slate-400 mr-2">#{i+1}</span>
-                                    <span className="text-xs font-black uppercase text-[#002855]">{name}</span>
+                              <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-2 gap-1">
+                                 <div className="min-w-0 flex-1">
+                                    <span className="text-[10px] font-black text-slate-400 mr-2 shrink-0">#{i+1}</span>
+                                    <span className="text-xs font-black uppercase text-[#002855] truncate">{name}</span>
                                  </div>
-                                 <div className="text-right">
-                                    <p className="text-sm font-black text-slate-900 tabular-nums">{formatCurrency(data.revenue)}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase">{data.weight.toFixed(1)} kg vendidos</p>
+                                 <div className="sm:text-right">
+                                    <p className="text-sm font-black text-slate-900 tabular-nums truncate">{formatCurrency(data.revenue)}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase truncate">{data.weight.toFixed(1)} kg vendidos</p>
                                  </div>
                               </div>
                               <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
@@ -589,20 +633,20 @@ const App: React.FC = () => {
                      </div>
                   </div>
 
-                  <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-200">
+                  <div className="bg-white rounded-[3rem] p-6 md:p-10 shadow-sm border border-slate-200">
                      <h4 className="text-sm font-black uppercase text-red-600 italic mb-8 border-b border-slate-100 pb-4">Ranking de Exposição (Dívida Acumulada)</h4>
                      <div className="space-y-4">
                         {stats.customerRiskRanking.map((c, i) => (
-                           <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-slate-200 group hover:border-red-200 hover:bg-red-50 transition-all">
-                              <div className="flex items-center gap-4">
-                                 <span className="w-10 h-10 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center font-black text-xs text-slate-400 group-hover:border-red-400 group-hover:text-red-600 transition-all">{i+1}</span>
-                                 <div>
-                                    <p className="text-xs font-black uppercase text-[#002855]">{c.name}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Concentra {((c.pending / (stats.pend || 1)) * 100).toFixed(1)}% do valor pendente</p>
+                           <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-slate-200 group hover:border-red-200 hover:bg-red-50 transition-all gap-4">
+                              <div className="flex items-center gap-4 min-w-0 flex-1">
+                                 <span className="w-10 h-10 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center font-black text-xs text-slate-400 group-hover:border-red-400 group-hover:text-red-600 transition-all shrink-0">{i+1}</span>
+                                 <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-black uppercase text-[#002855] truncate">{c.name}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase truncate">Concentra {((c.pending / (stats.pend || 1)) * 100).toFixed(1)}% do valor pendente</p>
                                  </div>
                               </div>
-                              <div className="text-right">
-                                 <p className="text-sm font-black text-red-600 tabular-nums">{formatCurrency(c.pending)}</p>
+                              <div className="sm:text-right w-full sm:w-auto">
+                                 <p className="text-sm font-black text-red-600 tabular-nums truncate">{formatCurrency(c.pending)}</p>
                                  <p className="text-[8px] font-black uppercase text-slate-400">Total Devido</p>
                               </div>
                            </div>
@@ -615,23 +659,23 @@ const App: React.FC = () => {
 
           {activeView === 'purchases' && (
             <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <h3 className="text-2xl font-black text-[#002855] italic">Central de Compras</h3>
-                 <button onClick={() => setIsPurchaseModalOpen(true)} className="bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-red-700 transition-all active:scale-95"><ShoppingIcon className="w-4 h-4" /> LANÇAR COMPRA</button>
+                 <button onClick={() => setIsPurchaseModalOpen(true)} className="w-full sm:w-auto bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:bg-red-700 transition-all active:scale-95"><ShoppingIcon className="w-4 h-4" /> LANÇAR COMPRA</button>
               </div>
-              <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
-                <table className="w-full text-left text-sm">
+              <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-x-auto shadow-sm custom-scrollbar">
+                <table className="w-full text-left text-sm min-w-[700px]">
                   <thead className="bg-slate-50 text-[10px] uppercase font-black tracking-widest text-slate-500">
                     <tr><th className="p-6">Data</th><th className="p-6">Produto</th><th className="p-6">Origem/Fornecedor</th><th className="p-6 text-right">Peso</th><th className="p-6 text-right">Custo Total</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {purchases.map(p => (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-6 text-slate-500 font-bold">{new Date(p.date).toLocaleDateString()}</td>
-                        <td className="p-6 font-black text-[#002855] uppercase">{p.productName}</td>
-                        <td className="p-6 text-slate-500 font-bold uppercase">{p.supplier || 'MERCADO'}</td>
-                        <td className="p-6 text-right font-black tabular-nums">{p.weightKg} kg</td>
-                        <td className="p-6 text-right text-red-600 font-black tabular-nums">{formatCurrency(Number(p.total) || 0)}</td>
+                        <td className="p-6 text-slate-500 font-bold whitespace-nowrap">{new Date(p.date).toLocaleDateString()}</td>
+                        <td className="p-6 font-black text-[#002855] uppercase truncate">{p.productName}</td>
+                        <td className="p-6 text-slate-500 font-bold uppercase truncate">{p.supplier || 'MERCADO'}</td>
+                        <td className="p-6 text-right font-black tabular-nums whitespace-nowrap">{p.weightKg} kg</td>
+                        <td className="p-6 text-right text-red-600 font-black tabular-nums whitespace-nowrap">{formatCurrency(Number(p.total) || 0)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -694,7 +738,7 @@ const App: React.FC = () => {
                    />
                    <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 shadow-inner flex flex-col justify-center">
                       <p className="text-[8px] font-black uppercase text-slate-400 mb-1">Cálculo Total</p>
-                      <p className="text-lg font-black text-[#002855] font-mono">
+                      <p className="text-lg font-black text-[#002855] font-mono truncate">
                          {formatCurrency(Number(purchaseFormData.weightKg) * Number(purchaseFormData.pricePerKg) || 0)}
                       </p>
                    </div>
@@ -713,12 +757,12 @@ const App: React.FC = () => {
                    const c = customers.find(x => x.id === activeCustomerId);
                    const e = c?.entries.find(ent => ent.id === activePartialEntryId);
                    return e ? (
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-sm font-black text-[#002855] uppercase leading-none">{e.productName}</p>
-                            <p className="text-[9px] font-bold text-slate-400 mt-1">EMITIDO EM {new Date(e.date).toLocaleDateString()}</p>
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2">
+                         <div className="min-w-0 flex-1">
+                            <p className="text-sm font-black text-[#002855] uppercase leading-none truncate">{e.productName}</p>
+                            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">EMITIDO EM {new Date(e.date).toLocaleDateString()}</p>
                          </div>
-                         <p className="text-lg font-black text-slate-900 tabular-nums">{formatCurrency(e.total - (e.paidAmount || 0))}</p>
+                         <p className="text-lg font-black text-slate-900 tabular-nums shrink-0">{formatCurrency(e.total - (e.paidAmount || 0))}</p>
                       </div>
                    ) : null;
                 })()}
@@ -811,12 +855,12 @@ const App: React.FC = () => {
           <Modal title={`Histórico: ${selectedStockItem.productName}`} onClose={() => setIsHistoryModalOpen(false)}>
              <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 {selectedStockItem.history.map((m, idx) => (
-                   <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
-                      <div>
-                         <p className="text-[10px] font-black uppercase text-[#002855] leading-none mb-1">{m.description}</p>
+                   <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                         <p className="text-[10px] font-black uppercase text-[#002855] leading-none mb-1 truncate">{m.description}</p>
                          <p className="text-[8px] font-bold text-slate-400 uppercase">{new Date(m.date).toLocaleDateString()}</p>
                       </div>
-                      <span className={`text-sm font-black tabular-nums ${m.weight > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <span className={`text-sm font-black tabular-nums shrink-0 ${m.weight > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                          {m.weight > 0 ? '+' : ''}{m.weight.toFixed(1)} kg
                       </span>
                    </div>
@@ -886,10 +930,10 @@ const App: React.FC = () => {
               <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
                  <CheckIcon className="w-10 h-10 text-emerald-600" />
               </div>
-              <h3 className="text-2xl font-black text-[#002855] mb-2">{lastSale.customer?.name}</h3>
+              <h3 className="text-2xl font-black text-[#002855] mb-2 px-2 break-words w-full">{lastSale.customer?.name}</h3>
               <div className="bg-slate-50 w-full p-6 rounded-3xl border border-slate-100 mb-8">
                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">VALOR TOTAL</p>
-                 <p className="text-3xl font-black text-[#002855] font-mono">{formatCurrency(lastSale.sale?.total)}</p>
+                 <p className="text-2xl md:text-3xl font-black text-[#002855] font-mono break-words">{formatCurrency(lastSale.sale?.total)}</p>
               </div>
               <div className="grid grid-cols-2 gap-4 w-full">
                  <button onClick={() => { setOrderToPrint({ customer: lastSale.customer, entries: [lastSale.sale] }); setTimeout(() => window.print(), 500); }} className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition-all">
@@ -909,8 +953,8 @@ const App: React.FC = () => {
 
 const NavItem = ({ label, icon: Icon, active, onClick }: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-8 py-5 relative transition-all group ${active ? 'text-white' : 'text-blue-200/50 hover:text-white hover:bg-white/5'}`}>
-    <Icon className={`w-5 h-5 transition-transform ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
-    <span className="font-black uppercase text-[10px] tracking-widest">{label}</span>
+    <Icon className={`w-5 h-5 transition-transform shrink-0 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
+    <span className="font-black uppercase text-[10px] tracking-widest truncate">{label}</span>
     {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-10 w-1.5 bg-yellow-400 rounded-r-full shadow-lg" />}
   </button>
 );
@@ -918,44 +962,44 @@ const NavItem = ({ label, icon: Icon, active, onClick }: any) => (
 const DashCard = ({ label, val, subLabel, color }: any) => {
   const styles: any = { blue: "border-blue-500", emerald: "border-emerald-500", yellow: "border-yellow-500", red: "border-red-500" };
   return (
-    <div className={`p-8 rounded-[2.5rem] border-t-8 bg-white shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden group ${styles[color]}`}>
-       <p className="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">{label}</p>
-       <p className="text-2xl font-black text-slate-900 tabular-nums">{val}</p>
-       <p className="text-[9px] font-bold text-slate-400 uppercase mt-2 tracking-tighter">{subLabel}</p>
+    <div className={`p-6 md:p-8 rounded-[2.5rem] border-t-8 bg-white shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden group ${styles[color]}`}>
+       <p className="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest truncate">{label}</p>
+       <p className="text-xl md:text-2xl font-black text-slate-900 tabular-nums break-words">{val}</p>
+       <p className="text-[9px] font-bold text-slate-400 uppercase mt-2 tracking-tighter truncate">{subLabel}</p>
     </div>
   );
 };
 
 const Stat = ({ label, val, color }: any) => (
-  <div className="text-right">
-    <p className="text-[9px] font-black uppercase text-slate-500 tracking-tighter">{label}</p>
-    <p className={`text-xl font-black ${color} font-mono tracking-tighter`}>{val}</p>
+  <div className="text-left md:text-right flex-1 min-w-0">
+    <p className="text-[9px] font-black uppercase text-slate-500 tracking-tighter truncate">{label}</p>
+    <p className={`text-base md:text-xl font-black ${color} font-mono tracking-tighter break-words leading-tight`}>{val}</p>
   </div>
 );
 
 const Modal = ({ title, children, onClose }: any) => (
   <div className="fixed inset-0 bg-[#002855]/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
     <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-300 border border-white/20">
-      <div className="bg-[#002855] p-8 text-white flex justify-between items-center border-b border-white/10">
-        <h3 className="text-xs font-black uppercase italic text-yellow-400 tracking-widest">{title}</h3>
-        <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 flex justify-center items-center hover:bg-white/20 transition-all active:scale-90">✕</button>
+      <div className="bg-[#002855] p-6 md:p-8 text-white flex justify-between items-center border-b border-white/10">
+        <h3 className="text-[10px] md:text-xs font-black uppercase italic text-yellow-400 tracking-widest truncate flex-1 pr-2">{title}</h3>
+        <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 flex justify-center items-center hover:bg-white/20 transition-all active:scale-90 shrink-0">✕</button>
       </div>
-      <div className="p-10 custom-scrollbar overflow-y-auto max-h-[80vh]">{children}</div>
+      <div className="p-6 md:p-10 custom-scrollbar overflow-y-auto max-h-[80vh]">{children}</div>
     </div>
   </div>
 );
 
 const Input = ({ label, uppercase, ...props }: any) => (
   <div>
-    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-4">{label}</label>
-    <input {...props} className={`w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-5 font-bold text-sm outline-none focus:border-[#002855] focus:bg-white transition-all shadow-inner ${uppercase ? 'uppercase' : ''}`} onChange={e => props.onChange(e.target.value)} />
+    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-4 truncate">{label}</label>
+    <input {...props} className={`w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 md:p-5 font-bold text-sm outline-none focus:border-[#002855] focus:bg-white transition-all shadow-inner ${uppercase ? 'uppercase' : ''}`} onChange={e => props.onChange(e.target.value)} />
   </div>
 );
 
 const PrimaryButton = ({ children, color = 'blue' }: any) => {
   const bg = color === 'blue' ? 'bg-[#002855] hover:bg-blue-900' : color === 'red' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700';
   return (
-    <button type="submit" className={`w-full ${bg} text-white font-black py-6 rounded-2xl uppercase text-[11px] shadow-xl hover:shadow-2xl mt-4 active:scale-95 transition-all tracking-[0.2em]`}>
+    <button type="submit" className={`w-full ${bg} text-white font-black py-5 md:py-6 rounded-2xl uppercase text-[10px] md:text-[11px] shadow-xl hover:shadow-2xl mt-4 active:scale-95 transition-all tracking-[0.2em] px-4 break-words`}>
       {children}
     </button>
   );
