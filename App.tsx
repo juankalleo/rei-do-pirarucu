@@ -82,22 +82,24 @@ const App: React.FC = () => {
 
   const stats = useMemo(() => {
     let rev = 0, rec = 0, pend = 0, kg = 0, saleCount = 0, totalExposure = 0;
-    const customerRanking: Record<string, { name: string, total: number, sales: number }> = {};
+    const customerRanking: Record<string, { name: string, total: number, sales: number, pending: number }> = {};
     const productRanking: Record<string, { weight: number, revenue: number, transactions: number }> = {};
 
     customers.forEach(c => {
       totalExposure += (c.creditLimit || 0);
-      customerRanking[c.id] = { name: c.name, total: 0, sales: 0 };
+      customerRanking[c.id] = { name: c.name, total: 0, sales: 0, pending: 0 };
       c.entries.forEach(e => {
         rev += e.total;
         if (!SERVICE_ITEMS.includes(e.productName)) kg += e.weightKg;
         saleCount++;
         const paid = e.isPaid ? e.total : (e.paidAmount || 0);
         rec += paid;
-        pend += (e.total - paid);
+        const entryPending = e.total - paid;
+        pend += entryPending;
         
         customerRanking[c.id].total += e.total;
         customerRanking[c.id].sales += 1;
+        customerRanking[c.id].pending += entryPending;
         
         if (!productRanking[e.productName]) productRanking[e.productName] = { weight: 0, revenue: 0, transactions: 0 };
         productRanking[e.productName].weight += e.weightKg;
@@ -120,12 +122,27 @@ const App: React.FC = () => {
       return { month: monthKey, revenue: mRev, costs: mCosts };
     }).reverse();
 
+    // Insights Lógicos (Inteligência do Negócio)
+    const insights = [];
+    if (efficiency < 60) insights.push({ type: 'warning', text: "A eficiência de cobrança está baixa. Priorize recebimentos pendentes." });
+    if (profit < 0) insights.push({ type: 'error', text: "Custos de compra excedem o faturamento total. Revise margens." });
+    
+    const topProd = Object.entries(productRanking).sort((a,b) => b[1].revenue - a[1].revenue)[0];
+    if (topProd) insights.push({ type: 'success', text: `O produto "${topProd[0]}" é sua principal fonte de receita (${formatCurrency(topProd[1].revenue)}).` });
+
+    const totalWeightInStock = stock.reduce((a,b) => a + (SERVICE_ITEMS.includes(b.productName) ? 0 : b.availableWeight), 0);
+    const stockAssetValue = stock.reduce((a,b) => a + (b.availableWeight * b.basePricePerKg), 0);
+
     return { 
       rev, rec, pend, kg, costs, profit, efficiency, ticketMedio, totalExposure,
       topPerformanceCustomers: Object.values(customerRanking).sort((a, b) => b.total - a.total).slice(0, 5),
-      mostProfitableProducts: Object.entries(productRanking).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5),
+      mostProfitableProducts: Object.entries(productRanking).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 10),
       monthlyData,
-      lowStock: stock.filter(i => !SERVICE_ITEMS.includes(i.productName) && i.availableWeight < 50).sort((a,b) => a.availableWeight - b.availableWeight).slice(0, 5)
+      lowStock: stock.filter(i => !SERVICE_ITEMS.includes(i.productName) && i.availableWeight < 50).sort((a,b) => a.availableWeight - b.availableWeight),
+      insights,
+      totalWeightInStock,
+      stockAssetValue,
+      customerRiskRanking: Object.values(customerRanking).sort((a,b) => b.pending - a.pending).slice(0, 5)
     };
   }, [customers, purchases, stock]);
 
@@ -245,19 +262,14 @@ const App: React.FC = () => {
     e.preventDefault();
     const amount = Number(payData.amount);
     if (isNaN(amount) || amount <= 0) return;
-
     const customer = customers.find(c => c.id === activeCustomerId);
     const entry = customer?.entries.find(ent => ent.id === activePartialEntryId);
-    
     if (!entry) return;
-
     const pending = entry.total - (entry.paidAmount || 0);
-    
-    if (amount > pending + 0.01) { // 0.01 for floating point safety
+    if (amount > pending + 0.01) {
       setPayError(`Erro: O valor inserido (${formatCurrency(amount)}) excede o saldo devedor desta venda (${formatCurrency(pending)}).`);
       return;
     }
-
     setPayError(null);
     setCustomers(prev => prev.map(c => {
       if (c.id !== activeCustomerId) return c;
@@ -277,7 +289,6 @@ const App: React.FC = () => {
         })
       };
     }));
-    
     setIsDispatchModalOpen(false);
     setActivePartialEntryId(null);
   };
@@ -291,6 +302,7 @@ const App: React.FC = () => {
           <NavItem label="Estoque Físico" icon={BoxIcon} active={activeView === 'inventory'} onClick={() => setActiveView('inventory')} />
           <NavItem label="Compras" icon={ShoppingIcon} active={activeView === 'purchases'} onClick={() => setActiveView('purchases')} />
           <NavItem label="Clientes" icon={UsersIcon} active={activeView === 'customers'} onClick={() => setActiveView('customers')} />
+          <NavItem label="Relatório Inteligente" icon={ChartIcon} active={activeView === 'reports'} onClick={() => setActiveView('reports')} />
         </nav>
       </aside>
 
@@ -352,7 +364,7 @@ const App: React.FC = () => {
                       <div className="space-y-4">
                          {stats.lowStock.length === 0 ? (
                             <p className="text-xs text-slate-400 font-bold uppercase py-10 text-center">Tudo abastecido!</p>
-                         ) : stats.lowStock.map(item => (
+                         ) : stats.lowStock.slice(0, 5).map(item => (
                             <div key={item.productName} className="flex justify-between items-center p-4 bg-red-50 rounded-2xl border border-red-100">
                                <div>
                                   <p className="text-[10px] font-black text-red-900 uppercase leading-none mb-1">{item.productName}</p>
@@ -419,7 +431,6 @@ const App: React.FC = () => {
                      }}
                      onPrintOrder={(ents) => { setOrderToPrint({ customer: c, entries: ents }); setTimeout(() => window.print(), 500); }}
                      onDispatch={(cid, eids) => {
-                        // Multi-dispatch logic can go here, using first for now
                         const cust = customers.find(x => x.id === cid);
                         const ent = cust?.entries.find(e => e.id === eids[0]);
                         if (ent) {
@@ -433,6 +444,134 @@ const App: React.FC = () => {
                      onManageCredit={(id) => { setActiveCustomerId(id); setIsCreditModalOpen(true); }}
                    />
                  ))}
+               </div>
+            </div>
+          )}
+
+          {activeView === 'reports' && (
+            <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in zoom-in-95 duration-700">
+               {/* Header BI */}
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 pb-8">
+                  <div>
+                     <h3 className="text-3xl font-black text-[#002855] italic uppercase tracking-tighter">Relatório Inteligente</h3>
+                     <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Análise de Performance e Saúde do Negócio</p>
+                  </div>
+                  <div className="flex gap-4">
+                     <button onClick={() => window.print()} className="bg-white border-2 border-slate-200 p-4 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase">
+                        <PrinterIcon className="w-4 h-4" /> Exportar Relatório
+                     </button>
+                  </div>
+               </div>
+
+               {/* Resumo de Saúde do Negócio */}
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest">Patrimônio em Estoque</h4>
+                     <p className="text-3xl font-black text-[#002855] tabular-nums">{formatCurrency(stats.stockAssetValue)}</p>
+                     <p className="text-xs font-bold text-slate-400 mt-2 uppercase">{stats.totalWeightInStock.toFixed(0)} kg de mercadoria física</p>
+                  </div>
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest">Eficiência de Recebimento</h4>
+                     <div className="flex items-end gap-4">
+                        <p className="text-3xl font-black text-emerald-600 tabular-nums">{stats.efficiency.toFixed(1)}%</p>
+                        <div className="flex-1 bg-slate-100 h-2 rounded-full mb-3 overflow-hidden">
+                           <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${stats.efficiency}%` }}></div>
+                        </div>
+                     </div>
+                     <p className="text-xs font-bold text-slate-400 mt-2 uppercase">Meta Ideal: 90% ou superior</p>
+                  </div>
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest">Insights do Sistema</h4>
+                     <div className="space-y-3">
+                        {stats.insights.length === 0 ? (
+                           <p className="text-xs font-bold text-slate-400 uppercase">Operação estável, sem alertas críticos.</p>
+                        ) : stats.insights.map((ins, idx) => (
+                           <div key={idx} className={`flex items-start gap-3 p-3 rounded-xl border text-[9px] font-black uppercase leading-tight ${
+                              ins.type === 'error' ? 'bg-red-50 border-red-100 text-red-700' : 
+                              ins.type === 'warning' ? 'bg-yellow-50 border-yellow-100 text-yellow-700' : 
+                              'bg-emerald-50 border-emerald-100 text-emerald-700'
+                           }`}>
+                              <span className="mt-0.5">•</span> {ins.text}
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+
+               {/* Detalhamento de Performance */}
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                  {/* Ranking Rentabilidade Produtos */}
+                  <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-200">
+                     <h4 className="text-sm font-black uppercase text-[#002855] italic mb-8 border-b border-slate-100 pb-4">Análise de Receita por Produto</h4>
+                     <div className="space-y-6">
+                        {stats.mostProfitableProducts.map(([name, data], i) => (
+                           <div key={i} className="group">
+                              <div className="flex justify-between items-end mb-2">
+                                 <div>
+                                    <span className="text-[10px] font-black text-slate-400 mr-2">#{i+1}</span>
+                                    <span className="text-xs font-black uppercase text-[#002855]">{name}</span>
+                                 </div>
+                                 <div className="text-right">
+                                    <p className="text-sm font-black text-slate-900 tabular-nums">{formatCurrency(data.revenue)}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase">{data.weight.toFixed(1)} kg vendidos</p>
+                                 </div>
+                              </div>
+                              <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
+                                 <div className="bg-[#002855] h-full transition-all duration-1000 group-hover:bg-yellow-500" style={{ width: `${(data.revenue / stats.rev) * 100}%` }}></div>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+
+                  {/* Risco e Exposição de Clientes */}
+                  <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-200">
+                     <h4 className="text-sm font-black uppercase text-red-600 italic mb-8 border-b border-slate-100 pb-4">Ranking de Exposição (Dívida Acumulada)</h4>
+                     <div className="space-y-4">
+                        {stats.customerRiskRanking.map((c, i) => (
+                           <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-slate-200 group hover:border-red-200 hover:bg-red-50 transition-all">
+                              <div className="flex items-center gap-4">
+                                 <span className="w-10 h-10 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center font-black text-xs text-slate-400 group-hover:border-red-400 group-hover:text-red-600 transition-all">{i+1}</span>
+                                 <div>
+                                    <p className="text-xs font-black uppercase text-[#002855]">{c.name}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Concentra {((c.pending / stats.pend) * 100).toFixed(1)}% do valor pendente</p>
+                                 </div>
+                              </div>
+                              <div className="text-right">
+                                 <p className="text-sm font-black text-red-600 tabular-nums">{formatCurrency(c.pending)}</p>
+                                 <p className="text-[8px] font-black uppercase text-slate-400">Total Devido</p>
+                              </div>
+                           </div>
+                        ))}
+                        {stats.customerRiskRanking.length === 0 && <p className="text-center py-20 text-slate-300 font-black uppercase text-xs">Nenhuma pendência ativa</p>}
+                     </div>
+                  </div>
+               </div>
+
+               {/* BI de Compras e Fluxo */}
+               <div className="bg-[#002855] rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 -translate-y-1/2 translate-x-1/2 rounded-full"></div>
+                  <h4 className="text-sm font-black uppercase text-yellow-400 italic mb-10 tracking-widest">Resumo Financeiro Executivo</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-10 relative z-10">
+                     <div>
+                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Margem de Lucro Bruta</p>
+                        <p className={`text-3xl font-black tabular-nums ${stats.profit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                           {stats.rev > 0 ? ((stats.profit / stats.rev) * 100).toFixed(1) : 0}%
+                        </p>
+                     </div>
+                     <div>
+                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Ticket Médio Geral</p>
+                        <p className="text-3xl font-black tabular-nums">{formatCurrency(stats.ticketMedio)}</p>
+                     </div>
+                     <div>
+                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Faturamento / kg</p>
+                        <p className="text-3xl font-black tabular-nums">{stats.kg > 0 ? formatCurrency(stats.rev / stats.kg) : 'R$ 0,00'}</p>
+                     </div>
+                     <div>
+                        <p className="text-[9px] font-black uppercase text-white/50 mb-2">Exposição de Crédito</p>
+                        <p className="text-3xl font-black tabular-nums">{formatCurrency(stats.totalExposure)}</p>
+                     </div>
+                  </div>
                </div>
             </div>
           )}
@@ -713,7 +852,6 @@ const Input = ({ label, uppercase, ...props }: any) => (
   </div>
 );
 
-// Correctly handle block-body with curly braces for components with logic
 const PrimaryButton = ({ children, color = 'blue' }: any) => {
   const bg = color === 'blue' ? 'bg-[#002855] hover:bg-blue-900' : color === 'red' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700';
   return (
