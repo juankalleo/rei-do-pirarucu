@@ -140,6 +140,7 @@ const App: React.FC = () => {
   const [lastSale, setLastSale] = useState<{customer: Customer, sale: SaleEntry} | null>(null);
   const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null);
   const [orderToPrint, setOrderToPrint] = useState<{customer: Customer, entries: SaleEntry[]} | null>(null);
+  const [purchaseToPrint, setPurchaseToPrint] = useState<PurchaseEntry | null>(null);
   
   const [formData, setFormData] = useState({ productName: '', pricePerKg: '', weightKg: '', date: new Date().toISOString().split('T')[0] });
   const [stockFormData, setStockFormData] = useState({ name: '', weight: '', price: '' });
@@ -386,6 +387,9 @@ const App: React.FC = () => {
         console.error('Erro ao persistir compra:', err);
       }
     })();
+    // prepare printable purchase order
+    setPurchaseToPrint(newPurchase);
+    setTimeout(() => window.print(), 600);
     setIsPurchaseModalOpen(false);
     setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   };
@@ -803,7 +807,8 @@ const App: React.FC = () => {
                         <td className="p-6 text-slate-500 font-bold uppercase truncate">{p.supplier || 'MERCADO'}</td>
                         <td className="p-6 text-right font-black tabular-nums whitespace-nowrap">{p.weightKg} kg</td>
                         <td className="p-6 text-right text-red-600 font-black tabular-nums whitespace-nowrap">{formatCurrency(Number(p.total) || 0)}</td>
-                        <td className="p-6 text-right">
+                        <td className="p-6 text-right flex items-center justify-end gap-2">
+                          <button onClick={() => { setPurchaseToPrint(p); setTimeout(() => window.print(), 500); }} className="text-[#002855] font-black uppercase text-[10px] px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors">Imprimir</button>
                           <button onClick={() => handleDeletePurchase(p.id)} className="text-red-600 font-black uppercase text-[10px] px-3 py-2 rounded-lg hover:bg-red-50 transition-colors">Remover</button>
                         </td>
                       </tr>
@@ -883,6 +888,79 @@ const App: React.FC = () => {
              </form>
           </Modal>
         )}
+
+            {purchaseToPrint && (
+             <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8 text-black">
+              <div style={{ maxWidth: 820, margin: '0 auto', fontFamily: 'Georgia, serif', color: '#0b2540' }}>
+                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 86, height: 86, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#002855', borderRadius: 8 }}>
+                        <FishIcon className="w-10 h-10 text-yellow-400" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 1 }}>REI DO PIRARUCU</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Pescados e Frutos do Mar • AM</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Tel: (xx) xxxx-xxxx • contato@pirarucu.com</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, color: '#374151', fontWeight: 700 }}>Data</div>
+                    <div style={{ fontSize: 20, fontWeight: 800 }}>{new Date(purchaseToPrint.date).toLocaleDateString('pt-BR')}</div>
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#374151' }}><strong>Pedido:</strong> {purchaseToPrint.id}</div>
+                  </div>
+                </header>
+
+                <section style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                  <div style={{ flex: 1, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Fornecedor</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0b2540', marginTop: 6 }}>{purchaseToPrint.supplier || 'MERCADO'}</div>
+                  </div>
+                  <div style={{ width: 240, background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Cond. Pagto</div>
+                    <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>À vista / Transferência</div>
+                    <div style={{ fontSize: 9, color: '#6b7280', marginTop: 10 }}>Observações:</div>
+                    <div style={{ fontSize: 11, marginTop: 6 }}>{/* espaço para observações impressas */}</div>
+                  </div>
+                </section>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 18 }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9', textAlign: 'left' }}>
+                      <th style={{ padding: 12, fontSize: 12, fontWeight: 800, borderBottom: '1px solid #e6eef8' }}>Produto</th>
+                      <th style={{ padding: 12, fontSize: 12, fontWeight: 800, textAlign: 'center', borderBottom: '1px solid #e6eef8' }}>Peso (kg)</th>
+                      <th style={{ padding: 12, fontSize: 12, fontWeight: 800, textAlign: 'right', borderBottom: '1px solid #e6eef8' }}>Preço Unit.</th>
+                      <th style={{ padding: 12, fontSize: 12, fontWeight: 800, textAlign: 'right', borderBottom: '1px solid #e6eef8' }}>Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: 12, fontSize: 13, fontWeight: 800, color: '#0b2540' }}>{purchaseToPrint.productName}</td>
+                      <td style={{ padding: 12, fontSize: 13, textAlign: 'center', color: '#374151' }}>{Number(purchaseToPrint.weightKg).toFixed(2)}</td>
+                      <td style={{ padding: 12, fontSize: 13, textAlign: 'right', color: '#374151' }}>{formatCurrency(purchaseToPrint.pricePerKg)}</td>
+                      <td style={{ padding: 12, fontSize: 13, textAlign: 'right', fontWeight: 900 }}>{formatCurrency(purchaseToPrint.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Assinatura do Fornecedor</div>
+                    <div style={{ marginTop: 28, borderTop: '1px solid #e6eef8', width: 260, height: 22 }} />
+                  </div>
+                  <div style={{ width: 320, textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>TOTAL</div>
+                    <div style={{ fontSize: 28, fontWeight: 900 }}>{formatCurrency(purchaseToPrint.total)}</div>
+                  </div>
+                </div>
+
+                <footer style={{ marginTop: 28, fontSize: 11, color: '#6b7280' }}>
+                  <div>Rei do Pirarucu • Endereço: Rua Exemplo, 123 - Manaus, AM • CNPJ: 00.000.000/0000-00</div>
+                </footer>
+              </div>
+             </div>
+            )}
 
         {isDispatchModalOpen && (
           <Modal title="Pagamento / Quitação" onClose={() => setIsDispatchModalOpen(false)}>
@@ -1017,46 +1095,82 @@ const App: React.FC = () => {
           </Modal>
         )}
 
-        {orderToPrint && (
-          <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-10 text-black">
-             <div className="border-[12px] border-[#002855] p-10 rounded-[3rem] relative overflow-hidden">
-                <div className="flex justify-between items-center border-b-4 border-[#002855] pb-8 mb-10">
-                   <div>
-                      <h1 className="text-6xl font-black italic uppercase text-[#002855]">REI DO <span className="text-yellow-500">PIRARUCU</span></h1>
-                      <p className="text-[11px] font-black uppercase tracking-[0.5em] text-slate-400 mt-2">Pescados e Frutos do Mar Amazônicos</p>
+          {orderToPrint && (
+           <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8 text-black">
+             <div style={{ maxWidth: 900, margin: '0 auto', fontFamily: 'Georgia, serif', color: '#0b2540' }}>
+               <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+                 <div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 86, height: 86, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#002855', borderRadius: 8 }}>
+                      <FishIcon className="w-10 h-10 text-yellow-400" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 800 }}>REI DO PIRARUCU</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Pescados e Frutos do Mar • AM</div>
+                    </div>
                    </div>
-                   <div className="text-right">
-                      <p className="text-2xl font-black">{new Date().toLocaleDateString('pt-BR')}</p>
+                 </div>
+                 <div style={{ textAlign: 'right' }}>
+                   <div style={{ fontSize: 12, color: '#374151', fontWeight: 700 }}>Data</div>
+                   <div style={{ fontSize: 20, fontWeight: 800 }}>{new Date().toLocaleDateString('pt-BR')}</div>
+                 </div>
+               </header>
+
+               <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                 <div style={{ flex: 1, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                   <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Cliente</div>
+                   <div style={{ fontSize: 16, fontWeight: 800, color: '#0b2540', marginTop: 6 }}>{orderToPrint.customer.name}</div>
+                   <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>{orderToPrint.customer.address || ''}</div>
+                 </div>
+                 <div style={{ width: 260, background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                   <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo</div>
+                   <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Itens: {orderToPrint.entries.length}</div>
+                   <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Total: {formatCurrency(orderToPrint.entries.reduce((a, b) => a + b.total, 0))}</div>
+                 </div>
+               </div>
+
+               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 18 }}>
+                 <thead>
+                   <tr style={{ background: '#f1f5f9', textAlign: 'left' }}>
+                     <th style={{ padding: 12, fontSize: 12, fontWeight: 800, borderBottom: '1px solid #e6eef8' }}>Descrição</th>
+                     <th style={{ padding: 12, fontSize: 12, fontWeight: 800, textAlign: 'center', borderBottom: '1px solid #e6eef8' }}>Peso (kg)</th>
+                     <th style={{ padding: 12, fontSize: 12, fontWeight: 800, textAlign: 'right', borderBottom: '1px solid #e6eef8' }}>Preço Unit.</th>
+                     <th style={{ padding: 12, fontSize: 12, fontWeight: 800, textAlign: 'right', borderBottom: '1px solid #e6eef8' }}>Total</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {orderToPrint.entries.map(e => (
+                     <tr key={e.id}>
+                       <td style={{ padding: 12, fontSize: 13, fontWeight: 800, color: '#0b2540' }}>{e.productName}</td>
+                       <td style={{ padding: 12, fontSize: 13, textAlign: 'center', color: '#374151' }}>{e.weightKg.toFixed(1)}</td>
+                       <td style={{ padding: 12, fontSize: 13, textAlign: 'right', color: '#374151' }}>{formatCurrency(e.pricePerKg)}</td>
+                       <td style={{ padding: 12, fontSize: 13, textAlign: 'right', fontWeight: 900 }}>{formatCurrency(e.total)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                 <div style={{ flex: 1 }}>
+                   <div style={{ fontSize: 11, color: '#6b7280' }}>Observações</div>
+                   <div style={{ marginTop: 8, minHeight: 40, border: '1px dashed #e6eef8', padding: 8, borderRadius: 6 }}></div>
+                   <div style={{ marginTop: 20 }}>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>Assinatura do Emitente</div>
+                    <div style={{ marginTop: 28, borderTop: '1px solid #e6eef8', width: 260, height: 22 }} />
                    </div>
-                </div>
-                <div className="bg-slate-50 p-6 rounded-3xl mb-8">
-                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">CLIENTE</p>
-                   <p className="text-3xl font-black uppercase text-[#002855]">{orderToPrint.customer.name}</p>
-                </div>
-                <table className="w-full text-left border-collapse rounded-3xl overflow-hidden shadow-sm">
-                   <thead className="bg-[#002855] text-white uppercase text-[10px] font-black tracking-widest">
-                      <tr><th className="p-6">Descrição</th><th className="p-6 text-center">Peso (kg)</th><th className="p-6 text-right">Unit.</th><th className="p-6 text-right">Total</th></tr>
-                   </thead>
-                   <tbody className="divide-y-2 divide-slate-100">
-                      {orderToPrint.entries.map(e => (
-                         <tr key={e.id} className="font-bold text-sm bg-white">
-                            <td className="p-6 uppercase font-black text-[#002855]">{e.productName}</td>
-                            <td className="p-6 text-center font-mono text-slate-600">{e.weightKg.toFixed(1)}</td>
-                            <td className="p-6 text-right font-mono text-slate-600">{formatCurrency(e.pricePerKg)}</td>
-                            <td className="p-6 text-right font-black font-mono text-slate-900">{formatCurrency(e.total)}</td>
-                         </tr>
-                      ))}
-                   </tbody>
-                   <tfoot>
-                      <tr className="bg-slate-900 text-white">
-                         <td colSpan={3} className="p-10 text-right text-2xl font-black uppercase italic tracking-tighter text-yellow-400">TOTAL DO PEDIDO:</td>
-                         <td className="p-10 text-right text-4xl font-black text-white font-mono">{formatCurrency(orderToPrint.entries.reduce((a, b) => a + b.total, 0))}</td>
-                      </tr>
-                   </tfoot>
-                </table>
+                 </div>
+                 <div style={{ width: 320, textAlign: 'right' }}>
+                   <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>TOTAL DO PEDIDO</div>
+                   <div style={{ fontSize: 28, fontWeight: 900 }}>{formatCurrency(orderToPrint.entries.reduce((a, b) => a + b.total, 0))}</div>
+                 </div>
+               </div>
+
+               <footer style={{ marginTop: 28, fontSize: 11, color: '#6b7280' }}>
+                 <div>Rei do Pirarucu • contato@pirarucu.com • Tel: (xx) xxxx-xxxx</div>
+               </footer>
              </div>
-          </div>
-        )}
+           </div>
+          )}
       </main>
 
       {isSuccessModalOpen && lastSale && (
