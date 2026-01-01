@@ -209,9 +209,18 @@ const App: React.FC = () => {
       const totalVenda = weight * Number(formData.pricePerKg);
       if (!customer || !pName || weight <= 0) return;
       if (!SERVICE_ITEMS.includes(pName)) {
+        const item = stock.find(s => s.productName === pName);
+        if (!item) {
+          alert('Produto não encontrado no estoque. Ajuste o estoque manualmente antes de vender.');
+          return;
+        }
+        if (item.availableWeight < weight) {
+          alert('Estoque insuficiente para esta venda. Ajuste o estoque ou reduza a quantidade.');
+          return;
+        }
         setStock(prev => prev.map(s => s.productName === pName ? { 
           ...s, 
-          availableWeight: s.availableWeight - weight,
+          availableWeight: +(s.availableWeight - weight).toFixed(3),
           history: [{ id: Date.now().toString(), type: 'exit', weight: -weight, date: formData.date, description: `Venda p/ ${customer.name}` }, ...(s.history || [])]
         } : s));
       }
@@ -297,31 +306,13 @@ const App: React.FC = () => {
     const newPurchase: PurchaseEntry = { id: `PUR-${Date.now().toString().slice(-6)}`, productName: pName, weightKg: weight, pricePerKg: price, total, date: purchaseFormData.date, supplier: purchaseFormData.supplier };
     
     setPurchases(prev => [newPurchase, ...prev]);
-    
-    if (!SERVICE_ITEMS.includes(pName)) {
-      setStock(prev => {
-        const existing = prev.find(s => s.productName === pName);
-        if (existing) {
-          return prev.map(s => s.productName === pName ? { 
-            ...s, 
-            availableWeight: s.availableWeight + weight, 
-            basePricePerKg: price || s.basePricePerKg, 
-            history: [{ id: Date.now().toString(), type: 'entry', weight, date: purchaseFormData.date, description: `Compra: ${purchaseFormData.supplier || 'Fornecedor'}` }, ...(s.history || [])] 
-          } : s);
-        } else {
-          return [...prev, { 
-            productName: pName, 
-            availableWeight: weight, 
-            basePricePerKg: price, 
-            lastUpdate: new Date().toISOString(), 
-            history: [{ id: Date.now().toString(), type: 'entry', weight, date: purchaseFormData.date, description: `Compra Inicial` }] 
-          }];
-        }
-      });
-    }
-    
     setIsPurchaseModalOpen(false);
     setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
+  };
+
+  const handleDeletePurchase = (id: string) => {
+    if (!window.confirm('Deseja remover esta compra? Esta ação remove apenas o registro, sem alterar o estoque.')) return;
+    setPurchases(prev => prev.filter(p => p.id !== id));
   };
 
   const handleCreditUpdate = (e: React.FormEvent) => {
@@ -666,7 +657,7 @@ const App: React.FC = () => {
               <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-x-auto shadow-sm custom-scrollbar">
                 <table className="w-full text-left text-sm min-w-[700px]">
                   <thead className="bg-slate-50 text-[10px] uppercase font-black tracking-widest text-slate-500">
-                    <tr><th className="p-6">Data</th><th className="p-6">Produto</th><th className="p-6">Origem/Fornecedor</th><th className="p-6 text-right">Peso</th><th className="p-6 text-right">Custo Total</th></tr>
+                    <tr><th className="p-6">Data</th><th className="p-6">Produto</th><th className="p-6">Origem/Fornecedor</th><th className="p-6 text-right">Peso</th><th className="p-6 text-right">Custo Total</th><th className="p-6 text-right">Ações</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {purchases.map(p => (
@@ -676,6 +667,9 @@ const App: React.FC = () => {
                         <td className="p-6 text-slate-500 font-bold uppercase truncate">{p.supplier || 'MERCADO'}</td>
                         <td className="p-6 text-right font-black tabular-nums whitespace-nowrap">{p.weightKg} kg</td>
                         <td className="p-6 text-right text-red-600 font-black tabular-nums whitespace-nowrap">{formatCurrency(Number(p.total) || 0)}</td>
+                        <td className="p-6 text-right">
+                          <button onClick={() => handleDeletePurchase(p.id)} className="text-red-600 font-black uppercase text-[10px] px-3 py-2 rounded-lg hover:bg-red-50 transition-colors">Remover</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -744,7 +738,12 @@ const App: React.FC = () => {
                    </div>
                 </div>
 
-                <PrimaryButton color="red">Confirmar e Adicionar ao Estoque</PrimaryButton>
+                 <div className="p-4 rounded-2xl border border-yellow-100 bg-yellow-50 text-[12px] font-bold text-yellow-800">
+                   <p className="uppercase">Observação: Esta tela registra apenas a compra para controle financeiro/histórico.</p>
+                   <p className="text-[11px] font-semibold mt-1">Registrar uma compra <strong>não</strong> altera automaticamente o estoque físico. Use a opção de ajuste manual para atualizar saldos.</p>
+                 </div>
+
+                 <PrimaryButton color="red">Registrar Compra</PrimaryButton>
              </form>
           </Modal>
         )}
