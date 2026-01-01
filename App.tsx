@@ -929,9 +929,9 @@ const App: React.FC = () => {
                         <FishIcon className="w-10 h-10 text-yellow-400" />
                       </div>
                       <div>
-                        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 1 }}>REI DO PIRARUCU</div>
-                        <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Pescados e Frutos do Mar • AM</div>
-                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Tel: (xx) xxxx-xxxx • contato@pirarucu.com</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 1 }}>Pescados Rei do Pirarucu</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>CNPJ: 37.322.774/0001-49</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Contato: 69 99919-1597</div>
                       </div>
                     </div>
                   </div>
@@ -986,7 +986,9 @@ const App: React.FC = () => {
                 </div>
 
                 <footer style={{ marginTop: 28, fontSize: 11, color: '#6b7280' }}>
-                  <div>Rei do Pirarucu • Endereço: Rua Exemplo, 123 - Manaus, AM • CNPJ: 00.000.000/0000-00</div>
+                  <div>Pescados Rei do Pirarucu • CNPJ: 37.322.774/0001-49</div>
+                  <div>Endereço: Ramal maravilha Niterói, lote 79, gleba cunia</div>
+                  <div>Contato: 69 99919-1597</div>
                 </footer>
               </div>
              </div>
@@ -1135,8 +1137,8 @@ const App: React.FC = () => {
                       <FishIcon className="w-10 h-10 text-yellow-400" />
                     </div>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 800 }}>REI DO PIRARUCU</div>
-                      <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Pescados e Frutos do Mar • AM</div>
+                          <div style={{ fontSize: 18, fontWeight: 800 }}>Pescados Rei do Pirarucu</div>
+                          <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>CNPJ: 37.322.774/0001-49</div>
                     </div>
                    </div>
                  </div>
@@ -1196,7 +1198,9 @@ const App: React.FC = () => {
                </div>
 
                <footer style={{ marginTop: 28, fontSize: 11, color: '#6b7280' }}>
-                 <div>Rei do Pirarucu • contato@pirarucu.com • Tel: (xx) xxxx-xxxx</div>
+                 <div>Pescados Rei do Pirarucu • CNPJ: 37.322.774/0001-49</div>
+                 <div>Endereço: Ramal maravilha Niterói, lote 79, gleba cunia</div>
+                 <div>Contato: 69 99919-1597</div>
                </footer>
              </div>
            </div>
