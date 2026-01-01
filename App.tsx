@@ -754,9 +754,9 @@ const App: React.FC = () => {
                      <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Análise de Performance e Saúde do Negócio</p>
                   </div>
                   <div className="flex gap-4">
-                     <button onClick={() => window.print()} className="w-full md:w-auto bg-white border-2 border-slate-200 p-4 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-2 font-black text-[10px] uppercase">
-                        <PrinterIcon className="w-4 h-4" /> Exportar Relatório
-                     </button>
+                    <button onClick={() => { setOrderToPrint(null); setPurchaseToPrint(null); setTimeout(() => window.print(), 200); }} className="w-full md:w-auto bg-white border-2 border-slate-200 p-4 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-2 font-black text-[10px] uppercase">
+                      <PrinterIcon className="w-4 h-4" /> Exportar Relatório
+                    </button>
                   </div>
                </div>
 
