@@ -414,6 +414,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteCustomer = (id: string) => {
+    console.log('handleDeleteCustomer called for id:', id);
     if (!window.confirm('Deseja realmente excluir este cliente e todo seu histórico?')) return;
     setCustomers(prev => prev.filter(x => x.id !== id));
     // attempt remote deletion as well

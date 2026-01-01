@@ -142,9 +142,12 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
                <p className={`text-xs font-black font-mono tabular-nums ${totalPending > 0 ? 'text-red-600' : 'text-slate-500'}`}>{totalPending.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</p>
             </div>
          </div>
-         <button onClick={() => onAddEntry(customer.id)} className="w-full bg-[#002855] text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl hover:bg-blue-900 active:scale-95 transition-all flex items-center justify-center gap-2 border border-white/5">
-            <PlusIcon className="w-4 h-4 text-yellow-500" /> LANÇAR VENDA
-         </button>
+        <div className="flex gap-3">
+          <button onClick={() => onAddEntry(customer.id)} className="flex-1 bg-[#002855] text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl hover:bg-blue-900 active:scale-95 transition-all flex items-center justify-center gap-2 border border-white/5">
+           <PlusIcon className="w-4 h-4 text-yellow-500" /> LANÇAR VENDA
+          </button>
+          <button onClick={() => onDeleteCustomer(customer.id)} className="flex-shrink-0 px-4 py-4 bg-red-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.15em] hover:bg-red-700 transition-all">EXCLUIR</button>
+        </div>
       </div>
     </div>
   );
