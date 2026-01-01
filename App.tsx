@@ -492,35 +492,59 @@ const App: React.FC = () => {
 
   const handlePartialPaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = Number(payData.amount);
+    let amount = Number(payData.amount);
     if (isNaN(amount) || amount <= 0) return;
+    if (!activeCustomerId) return;
+
     const customer = customers.find(c => c.id === activeCustomerId);
-    const entry = customer?.entries.find(ent => ent.id === activePartialEntryId);
-    if (!entry) return;
-    const pending = entry.total - (entry.paidAmount || 0);
-    if (amount > pending + 0.01) {
-      setPayError(`Erro: O valor inserido (${formatCurrency(amount)}) excede o saldo devedor desta venda (${formatCurrency(pending)}).`);
+    if (!customer) return;
+
+    setPayError(null);
+
+    // Copy entries and sort outstanding by date (oldest first)
+    const outstanding = customer.entries
+      .map(e => ({ ...e }))
+      .filter(e => (e.total - (e.paidAmount || 0)) > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // If there's nothing outstanding, credit to wallet
+    if (outstanding.length === 0) {
+      setCustomers(prev => prev.map(c => c.id === activeCustomerId ? { ...c, walletBalance: (c.walletBalance || 0) + amount } : c));
+      setIsDispatchModalOpen(false);
+      setActivePartialEntryId(null);
       return;
     }
-    setPayError(null);
-    setCustomers(prev => prev.map(c => {
-      if (c.id !== activeCustomerId) return c;
-      return {
-        ...c,
-        entries: c.entries.map(ent => {
-          if (ent.id !== activePartialEntryId) return ent;
-          const newPaidAmount = (ent.paidAmount || 0) + amount;
-          const isFullyPaid = newPaidAmount >= ent.total - 0.01;
-          return {
-            ...ent,
-            paidAmount: newPaidAmount,
-            isPaid: isFullyPaid,
-            paidAt: isFullyPaid ? payData.date : ent.paidAt,
-            paymentHistory: [...(ent.paymentHistory || []), { id: Date.now().toString(), date: payData.date, amount, method: payData.method }]
-          };
-        })
-      };
-    }));
+
+    let remaining = amount;
+    const updatedEntries = customer.entries.map(ent => ({ ...ent }));
+
+    for (const ent of outstanding) {
+      if (remaining <= 0) break;
+      const pending = ent.total - (ent.paidAmount || 0);
+      const payNow = Math.min(remaining, pending);
+      remaining -= payNow;
+
+      const idx = updatedEntries.findIndex(u => u.id === ent.id);
+      if (idx >= 0) {
+        const newPaid = (updatedEntries[idx].paidAmount || 0) + payNow;
+        const isFullyPaid = newPaid >= updatedEntries[idx].total - 0.01;
+        updatedEntries[idx] = {
+          ...updatedEntries[idx],
+          paidAmount: newPaid,
+          isPaid: isFullyPaid,
+          paidAt: isFullyPaid ? payData.date : updatedEntries[idx].paidAt,
+          paymentHistory: [...(updatedEntries[idx].paymentHistory || []), { id: Date.now().toString() + Math.random().toString(36).slice(2,6), date: payData.date, amount: payNow, method: payData.method }]
+        };
+      }
+    }
+
+    // If leftover after covering all outstanding, add to wallet
+    setCustomers(prev => prev.map(c => c.id === activeCustomerId ? {
+      ...c,
+      entries: updatedEntries,
+      walletBalance: (c.walletBalance || 0) + (remaining > 0 ? remaining : 0)
+    } : c));
+
     setIsDispatchModalOpen(false);
     setActivePartialEntryId(null);
   };
