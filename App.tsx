@@ -413,6 +413,48 @@ const App: React.FC = () => {
     setIsCreditModalOpen(false);
   };
 
+  const handleDeleteCustomer = (id: string) => {
+    if (!window.confirm('Deseja realmente excluir este cliente e todo seu histórico?')) return;
+    setCustomers(prev => prev.filter(x => x.id !== id));
+    // attempt remote deletion as well
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          // delete payments -> sales -> customer
+          await supabase.from('payment_records').delete().in('sale_id', (await supabase.from('sales').select('id').eq('customer_id', id)).data?.map((r:any)=>r.id) || []);
+          await supabase.from('sales').delete().eq('customer_id', id);
+          const { error } = await supabase.from('customers').delete().eq('id', id);
+          if (error) console.error('Erro ao deletar cliente no Supabase:', error);
+        }
+      } catch (err) {
+        console.error('Erro ao deletar cliente remotamente:', err);
+      }
+    })();
+  };
+
+  const handleResetAllData = () => {
+    if (!window.confirm('Zerar todos os dados locais e (opcional) tentar limpar no Supabase?')) return;
+    // clear local state
+    setCustomers([]);
+    setPurchases([]);
+    setStock(PRODUCT_SUGGESTIONS.map(p => ({ productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString(), history: [] })));
+    // clear localStorage
+    try { localStorage.removeItem('pirarucu_v7_customers'); localStorage.removeItem('pirarucu_v7_purchases'); localStorage.removeItem('pirarucu_v7_stock'); } catch(e){}
+    // attempt remote clear (non-destructive: will try to delete all customers/sales/purchases)
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          await supabase.from('payment_records').delete().neq('id', '');
+          await supabase.from('sales').delete().neq('id', '');
+          await supabase.from('purchases').delete().neq('id', '');
+          await supabase.from('customers').delete().neq('id', '');
+        }
+      } catch (err) {
+        console.error('Erro ao resetar dados no Supabase:', err);
+      }
+    })();
+  };
+
   const handlePartialPaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(payData.amount);
@@ -489,6 +531,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-3 w-full md:w-auto">
             <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 shrink-0 hover:bg-slate-100 rounded-lg transition-colors"><LayoutIcon className="w-6 h-6 text-[#002855]"/></button>
             <h2 className="text-lg md:text-xl font-black text-[#002855] uppercase italic truncate flex-1 min-w-0">Central <span className="text-yellow-500">Operacional</span></h2>
+            <button onClick={handleResetAllData} title="Zerar dados" className="ml-4 p-2 bg-red-50 text-red-700 rounded-lg text-xs font-black hidden md:inline-block">Zerar Dados</button>
           </div>
           <div className="flex flex-row flex-wrap gap-4 md:gap-8 w-full md:w-auto justify-between md:justify-end">
             <Stat label="Recebido Real" val={formatCurrency(stats.rec)} color="text-emerald-600" />
@@ -611,7 +654,7 @@ const App: React.FC = () => {
                    <CustomerCard 
                      key={c.id} customer={c} 
                      onAddEntry={(id) => { setActiveCustomerId(id); setIsVendaModalOpen(true); }}
-                     onDeleteCustomer={(id) => { if(window.confirm("Deseja realmente excluir este cliente e todo seu histórico?")) setCustomers(prev => prev.filter(x => x.id !== id)); }}
+                    onDeleteCustomer={(id) => handleDeleteCustomer(id)}
                      onDeleteEntry={(cid, eid) => setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.filter(e => e.id !== eid) } : cust))}
                      onTogglePayment={(cid, eid) => setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.map(e => e.id === eid ? { ...e, isPaid: !e.isPaid } : e) } : cust))}
                      onPartialPayment={(cid, eid) => {
