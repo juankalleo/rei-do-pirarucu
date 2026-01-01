@@ -74,21 +74,48 @@ const App: React.FC = () => {
     (async () => {
       try {
         if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-          const { data, error } = await supabase.from('purchases').select('*').order('date', { ascending: false });
-          if (!error && data) {
-            const mapped = data.map((r: any) => ({
-              id: r.id,
-              productName: r.product_name,
-              weightKg: Number(r.weight_kg) || 0,
-              pricePerKg: Number(r.price_per_kg) || 0,
-              total: Number(r.total) || 0,
-              date: r.date ? (typeof r.date === 'string' ? r.date : new Date(r.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
-              supplier: r.supplier || ''
-            }));
-            setPurchases(mapped);
+          // Fetch purchases and customers to determine whether remote DB is empty.
+          const [{ data: purchasesData }, { data: customersData }, { data: salesData }] = await Promise.all([
+            supabase.from('purchases').select('*').order('date', { ascending: false }),
+            supabase.from('customers').select('*'),
+            // 'sales' may be empty or not present in some schemas; guarded request
+            supabase.from('sales').select('id')
+          ]);
+
+          const remotePurchases = purchasesData || [];
+          const remoteCustomers = customersData || [];
+          const remoteSales = salesData || [];
+
+          // If remote DB is empty (no purchases, no customers, no sales) then clear localStorage
+          // to avoid carrying demo/stale data between devices.
+          if (remotePurchases.length === 0 && remoteCustomers.length === 0 && remoteSales.length === 0) {
+            try {
+              localStorage.removeItem('pirarucu_v7_customers');
+              localStorage.removeItem('pirarucu_v7_purchases');
+              localStorage.removeItem('pirarucu_v7_stock');
+            } catch (e) {
+              console.warn('Falha ao limpar localStorage:', e);
+            }
+            setCustomers([]);
+            setPurchases([]);
+            setStock(PRODUCT_SUGGESTIONS.map(p => ({ productName: p.toUpperCase().trim(), availableWeight: 0, basePricePerKg: 0, lastUpdate: new Date().toISOString(), history: [] })));
+          } else {
+            // If there are remote purchases, map them into local state so clients sync.
+            if (remotePurchases.length > 0) {
+              const mapped = remotePurchases.map((r: any) => ({
+                id: r.id,
+                productName: r.product_name,
+                weightKg: Number(r.weight_kg) || 0,
+                pricePerKg: Number(r.price_per_kg) || 0,
+                total: Number(r.total) || 0,
+                date: r.date ? (typeof r.date === 'string' ? r.date : new Date(r.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+                supplier: r.supplier || ''
+              }));
+              setPurchases(mapped);
+            }
           }
 
-          // subscribe to changes (insert, update, delete)
+          // subscribe to realtime changes for purchases
           subscription = supabase.channel('public:purchases')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'purchases' }, (payload) => {
               const ev = payload.eventType; // INSERT, UPDATE, DELETE
