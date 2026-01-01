@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Customer, SaleEntry, StockItem, ViewType, PurchaseEntry } from './types';
+import { supabase } from './supabase/client';
 import { INITIAL_CUSTOMERS, PRODUCT_SUGGESTIONS } from './constants';
 import { 
   FishIcon, PlusIcon, BoxIcon, CheckIcon, 
@@ -305,7 +306,31 @@ const App: React.FC = () => {
     const total = Number(purchaseFormData.total) || (weight * price);
     const newPurchase: PurchaseEntry = { id: `PUR-${Date.now().toString().slice(-6)}`, productName: pName, weightKg: weight, pricePerKg: price, total, date: purchaseFormData.date, supplier: purchaseFormData.supplier };
     
+    // push to local state first for instant UX
     setPurchases(prev => [newPurchase, ...prev]);
+
+    // Try to persist to Supabase if configured; do not change stock here (business rule)
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          const { error } = await supabase.from('purchases').insert([{ 
+            id: newPurchase.id,
+            product_name: newPurchase.productName,
+            weight_kg: newPurchase.weightKg,
+            price_per_kg: newPurchase.pricePerKg,
+            total: newPurchase.total,
+            date: newPurchase.date,
+            supplier: newPurchase.supplier
+          }]);
+          if (error) {
+            console.error('Erro ao salvar compra no Supabase:', error);
+            // keep local fallback; optionally notify user
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao persistir compra:', err);
+      }
+    })();
     setIsPurchaseModalOpen(false);
     setPurchaseFormData({ productName: '', weightKg: '', pricePerKg: '', total: '', date: new Date().toISOString().split('T')[0], supplier: '' });
   };
