@@ -1153,6 +1153,7 @@ const App: React.FC = () => {
                    <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Cliente</div>
                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0b2540', marginTop: 6 }}>{orderToPrint.customer.name}</div>
                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>{orderToPrint.customer.address || ''}</div>
+                   <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>CPF/CNPJ: {orderToPrint.customer.taxId || '-'}</div>
                  </div>
                  <div style={{ width: 260, background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
                    <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo</div>
