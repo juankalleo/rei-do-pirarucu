@@ -68,6 +68,61 @@ const App: React.FC = () => {
     }
   });
 
+  // Sync purchases from Supabase (if configured) and subscribe to realtime changes
+  useEffect(() => {
+    let subscription: any = null;
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          const { data, error } = await supabase.from('purchases').select('*').order('date', { ascending: false });
+          if (!error && data) {
+            const mapped = data.map((r: any) => ({
+              id: r.id,
+              productName: r.product_name,
+              weightKg: Number(r.weight_kg) || 0,
+              pricePerKg: Number(r.price_per_kg) || 0,
+              total: Number(r.total) || 0,
+              date: r.date ? (typeof r.date === 'string' ? r.date : new Date(r.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+              supplier: r.supplier || ''
+            }));
+            setPurchases(mapped);
+          }
+
+          // subscribe to changes (insert, update, delete)
+          subscription = supabase.channel('public:purchases')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'purchases' }, (payload) => {
+              const ev = payload.eventType; // INSERT, UPDATE, DELETE
+              const record = payload.new || payload.old;
+              if (!record) return;
+              if (ev === 'INSERT') {
+                const entry: PurchaseEntry = {
+                  id: record.id,
+                  productName: record.product_name,
+                  weightKg: Number(record.weight_kg) || 0,
+                  pricePerKg: Number(record.price_per_kg) || 0,
+                  total: Number(record.total) || 0,
+                  date: record.date ? (typeof record.date === 'string' ? record.date : new Date(record.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+                  supplier: record.supplier || ''
+                };
+                setPurchases(prev => prev.some(p => p.id === entry.id) ? prev : [entry, ...prev]);
+              } else if (ev === 'UPDATE') {
+                setPurchases(prev => prev.map(p => p.id === record.id ? ({ ...p, productName: record.product_name, weightKg: Number(record.weight_kg) || 0, pricePerKg: Number(record.price_per_kg) || 0, total: Number(record.total) || 0, date: record.date, supplier: record.supplier }) : p));
+              } else if (ev === 'DELETE') {
+                setPurchases(prev => prev.filter(p => p.id !== record.id));
+              }
+            })
+            .subscribe();
+        }
+      } catch (err) {
+        console.error('Erro ao sincronizar compras com Supabase:', err);
+      }
+    })();
+
+    return () => {
+      if (subscription && subscription.unsubscribe) subscription.unsubscribe();
+    };
+  }, []);
+
   const SERVICE_ITEMS = ['FRETE', 'CAIXA', 'DEPOSITO'];
 
   const [isVendaModalOpen, setIsVendaModalOpen] = useState(false);
@@ -337,7 +392,19 @@ const App: React.FC = () => {
 
   const handleDeletePurchase = (id: string) => {
     if (!window.confirm('Deseja remover esta compra? Esta ação remove apenas o registro, sem alterar o estoque.')) return;
+    // optimistic UI update
     setPurchases(prev => prev.filter(p => p.id !== id));
+    // attempt remote deletion
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          const { error } = await supabase.from('purchases').delete().eq('id', id);
+          if (error) console.error('Erro ao deletar compra no Supabase:', error);
+        }
+      } catch (err) {
+        console.error('Erro ao deletar compra:', err);
+      }
+    })();
   };
 
   const handleCreditUpdate = (e: React.FormEvent) => {
