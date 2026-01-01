@@ -1230,6 +1230,73 @@ const App: React.FC = () => {
              </div>
            </div>
           )}
+
+          {activeView === 'reports' && (
+            <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8 text-black">
+              <div style={{ maxWidth: 900, margin: '0 auto', fontFamily: 'Georgia, serif', color: '#0b2540' }}>
+                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 86, height: 86, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#002855', borderRadius: 8 }}>
+                        <FishIcon className="w-10 h-10 text-yellow-400" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 800 }}>Pescados Rei do Pirarucu</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>CNPJ: 37.322.774/0001-49</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, color: '#374151', fontWeight: 700 }}>Data</div>
+                    <div style={{ fontSize: 20, fontWeight: 800 }}>{new Date().toLocaleDateString('pt-BR')}</div>
+                  </div>
+                </header>
+
+                <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+                  <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Patrimônio em Estoque</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, marginTop: 8 }}>{formatCurrency(stats.stockAssetValue)}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>{stats.totalWeightInStock.toFixed(0)} kg de mercadoria física</div>
+                  </div>
+                  <div style={{ background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo Financeiro</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, marginTop: 8 }}>Faturamento: {formatCurrency(stats.rev)}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280', marginTop: 6 }}>Lucro Est.: {formatCurrency(stats.profit)}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280', marginTop: 6 }}>Ticket médio: {formatCurrency(stats.ticketMedio)}</div>
+                  </div>
+                </section>
+
+                <section style={{ marginBottom: 16 }}>
+                  <h4 style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', marginBottom: 8 }}>Produtos com Baixo Estoque</h4>
+                  {stats.lowStock.length === 0 ? (
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>Nenhum item abaixo do nível crítico.</div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ textAlign: 'left', background: '#f1f5f9' }}>
+                          <th style={{ padding: 10, fontWeight: 800 }}>Produto</th>
+                          <th style={{ padding: 10, fontWeight: 800, textAlign: 'right' }}>Saldo (kg)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.lowStock.map((it, i) => (
+                          <tr key={i}>
+                            <td style={{ padding: 10, fontWeight: 700 }}>{it.productName}</td>
+                            <td style={{ padding: 10, textAlign: 'right' }}>{it.availableWeight.toFixed(1)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </section>
+
+                <footer style={{ marginTop: 28, fontSize: 11, color: '#6b7280' }}>
+                  <div>Pescados Rei do Pirarucu • CNPJ: 37.322.774/0001-49</div>
+                  <div>Endereço: Ramal maravilha Niterói, lote 79, gleba cunia • Contato: 69 99919-1597</div>
+                </footer>
+              </div>
+            </div>
+          )}
       </main>
 
       {isSuccessModalOpen && lastSale && (
