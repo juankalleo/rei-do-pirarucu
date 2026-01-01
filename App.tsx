@@ -220,7 +220,10 @@ const App: React.FC = () => {
     });
     
     const costs = purchases.reduce((a, b) => a + (Number(b.total) || 0), 0);
-    const profit = rev - costs;
+    // Business rule: purchases are financial records only and MUST NOT affect
+    // the estimated gross profit shown in the dashboard. Therefore do not
+    // subtract `costs` from revenue when calculating `profit`.
+    const profit = rev;
     const efficiency = rev > 0 ? (rec / rev) * 100 : 0;
     const ticketMedio = saleCount > 0 ? rev / saleCount : 0;
 
