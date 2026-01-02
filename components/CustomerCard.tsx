@@ -28,7 +28,7 @@ function formatCurrencyShort(value: number) {
 const CustomerCard: React.FC<CustomerCardProps> = ({ 
   customer, onAddEntry, onDeleteEntry, onTogglePayment, 
   onPartialPayment, onDeleteCustomer, onPrintOrder, onDispatch,
-  onManageCredit
+  onManageCredit, onSettleAll
 }) => {
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
   

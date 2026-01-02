@@ -65,12 +65,16 @@ const App: React.FC = () => {
       try {
         if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
           // Fetch purchases and customers to determine whether remote DB is empty.
-          const [{ data: purchasesData }, { data: customersData }, { data: salesData }] = await Promise.all([
+          const results: any[] = await Promise.all([
             supabase.from('purchases').select('*').order('date', { ascending: false }),
             supabase.from('customers').select('*'),
             // 'sales' may be empty or not present in some schemas; guarded request
             supabase.from('sales').select('id')
           ]);
+
+          const purchasesData = (results[0] && (results[0] as any).data) || [];
+          const customersData = (results[1] && (results[1] as any).data) || [];
+          const salesData = (results[2] && (results[2] as any).data) || [];
 
           const remotePurchases = purchasesData || [];
           const remoteCustomers = customersData || [];
@@ -107,9 +111,9 @@ const App: React.FC = () => {
 
           // subscribe to realtime changes for purchases
           subscription = supabase.channel('public:purchases')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'purchases' }, (payload) => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'purchases' }, (payload: any) => {
               const ev = payload.eventType; // INSERT, UPDATE, DELETE
-              const record = payload.new || payload.old;
+              const record: any = payload.new || payload.old;
               if (!record) return;
               if (ev === 'INSERT') {
                 const entry: PurchaseEntry = {
@@ -156,9 +160,19 @@ const App: React.FC = () => {
           credit_limit: cust.creditLimit || 0,
           price_list: cust.priceList || {}
         };
-        const { error } = await supabase.from('customers').upsert([payload]);
-        removePending(key);
-        if (error) console.error('Erro ao persistir cliente no Supabase:', error);
+        let { error } = await supabase.from('customers').upsert([payload]);
+        // If schema mismatch (missing column like price_list), retry without that field
+        if (error && error.message && error.message.includes('price_list')) {
+          console.warn('Supabase schema missing `price_list`; retrying upsert without it.');
+          const altPayload = { ...payload } as any;
+          delete altPayload.price_list;
+          const { error: err2 } = await supabase.from('customers').upsert([altPayload]);
+          if (err2) console.error('Retry (without price_list) failed:', err2);
+          removePending(key);
+        } else {
+          removePending(key);
+          if (error) console.error('Erro ao persistir cliente no Supabase:', error);
+        }
       }
     } catch (err) {
       console.error('persistCustomer error:', err);
@@ -247,9 +261,9 @@ const App: React.FC = () => {
       const tables = ['customers', 'sales', 'purchases', 'stock', 'payment_records'];
       tables.forEach(tbl => {
         const ch = supabase.channel(`public:${tbl}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, (payload) => {
+          .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, (payload: any) => {
             const ev = payload.eventType; // INSERT, UPDATE, DELETE
-            const record = payload.new || payload.old;
+            const record: any = payload.new || payload.old;
             if (!record) return;
             const key = `${tbl}:${record.id}`;
             if (pendingOps.current.has(key)) {

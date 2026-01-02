@@ -4,8 +4,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // Error Boundary Simples para Produção
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
-  constructor(props: {children: React.ReactNode}) {
+class ErrorBoundary extends React.Component<any, any> {
+  props: any;
+  state: any;
+  constructor(props: any) {
     super(props);
     this.state = { hasError: false };
   }
