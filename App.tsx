@@ -160,22 +160,35 @@ const App: React.FC = () => {
           credit_limit: cust.creditLimit || 0,
           price_list: cust.priceList || {}
         };
+        console.debug('[persistCustomer] upserting customer to Supabase', payload);
         let { error } = await supabase.from('customers').upsert([payload]);
+        if (!error) {
+          console.info('[persistCustomer] upsert success for', cust.id);
+          removePending(key);
+          return true;
+        }
         // If schema mismatch (missing column like price_list), retry without that field
         if (error && error.message && error.message.includes('price_list')) {
-          console.warn('Supabase schema missing `price_list`; retrying upsert without it.');
+          console.warn('[persistCustomer] Supabase schema missing `price_list`; retrying upsert without it.');
           const altPayload = { ...payload } as any;
           delete altPayload.price_list;
           const { error: err2 } = await supabase.from('customers').upsert([altPayload]);
-          if (err2) console.error('Retry (without price_list) failed:', err2);
+          if (err2) {
+            console.error('[persistCustomer] Retry (without price_list) failed:', err2);
+            removePending(key);
+            return false;
+          }
+          console.info('[persistCustomer] upsert success after removing price_list for', cust.id);
           removePending(key);
-        } else {
-          removePending(key);
-          if (error) console.error('Erro ao persistir cliente no Supabase:', error);
+          return true;
         }
+        removePending(key);
+        console.error('[persistCustomer] Erro ao persistir cliente no Supabase:', error);
+        return false;
       }
     } catch (err) {
       console.error('persistCustomer error:', err);
+      return false;
     }
   };
 
@@ -198,12 +211,20 @@ const App: React.FC = () => {
           paid_at: sale.paidAt || null,
           payment_history: sale.paymentHistory ? JSON.stringify(sale.paymentHistory) : null
         };
+        console.debug('[persistSale] upserting sale to Supabase', payload);
         const { error } = await supabase.from('sales').upsert([payload]);
+        if (!error) {
+          console.info('[persistSale] upsert success for', sale.id);
+          removePending(key);
+          return true;
+        }
         removePending(key);
-        if (error) console.error('Erro ao persistir venda no Supabase:', error);
+        console.error('[persistSale] Erro ao persistir venda no Supabase:', error);
+        return false;
       }
     } catch (err) {
       console.error('persistSale error:', err);
+      return false;
     }
   };
 
@@ -212,6 +233,7 @@ const App: React.FC = () => {
       if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
         const key = `purchases:${purchase.id}`;
         addPending(key);
+        console.debug('[persistPurchase] upserting purchase to Supabase', purchase);
         const { error } = await supabase.from('purchases').upsert([{
           id: purchase.id,
           product_name: purchase.productName,
@@ -221,11 +243,18 @@ const App: React.FC = () => {
           date: purchase.date,
           supplier: purchase.supplier || null
         }]);
+        if (!error) {
+          console.info('[persistPurchase] upsert success for', purchase.id);
+          removePending(key);
+          return true;
+        }
         removePending(key);
-        if (error) console.error('Erro ao persistir compra no Supabase:', error);
+        console.error('[persistPurchase] Erro ao persistir compra no Supabase:', error);
+        return false;
       }
     } catch (err) {
       console.error('persistPurchase error:', err);
+      return false;
     }
   };
 
@@ -234,12 +263,19 @@ const App: React.FC = () => {
       if (!payments.length) return;
       if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
         payments.forEach(p => addPending(`payment_records:${p.id}`));
+        console.debug('[persistNewPayments] inserting payments', payments);
         const { error } = await supabase.from('payment_records').insert(payments);
         payments.forEach(p => removePending(`payment_records:${p.id}`));
-        if (error) console.error('Erro ao persistir payment_records:', error);
+        if (!error) {
+          console.info('[persistNewPayments] insert success for', payments.map(p=>p.id));
+          return true;
+        }
+        console.error('[persistNewPayments] Erro ao persistir payment_records:', error);
+        return false;
       }
     } catch (err) {
       console.error('persistNewPayments error:', err);
+      return false;
     }
   };
 
