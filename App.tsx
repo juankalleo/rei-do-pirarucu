@@ -14,18 +14,8 @@ const formatCurrency = (val: number) =>
   val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const BrandLogo = () => (
-  <div className="flex flex-col items-center text-center select-none py-4 px-2">
-    <div className="relative mb-1">
-      <FishIcon className="w-20 h-20 text-yellow-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
-    </div>
-    <div className="flex items-center gap-3 w-full mb-0.5">
-      <div className="h-[1px] flex-1 bg-yellow-500/40"></div>
-      <span className="text-[9px] font-bold text-yellow-500 tracking-[0.4em] uppercase leading-none">Pescados</span>
-      <div className="h-[1px] flex-1 bg-yellow-500/40"></div>
-    </div>
-    <h1 className="font-serif font-bold text-3xl text-white uppercase tracking-tight leading-none italic">
-      Rei do <span className="text-yellow-500">Pirarucu</span>
-    </h1>
+  <div className="flex items-center justify-center py-4 px-2">
+    <img src="/logoreipirarucu.png" alt="Rei do Pirarucu" className="w-44 md:w-56 max-w-full h-auto object-contain" />
   </div>
 );
 
@@ -570,7 +560,7 @@ const App: React.FC = () => {
       )}
 
       {/* SIDEBAR DRAWER */}
-      <aside className={`fixed md:relative inset-y-0 left-0 w-[min(80vw,320px)] md:w-72 bg-[#002855] text-white flex flex-col shadow-2xl z-[60] transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`fixed md:relative inset-y-0 left-0 w-[min(80vw,260px)] md:w-56 bg-[#002855] text-white flex flex-col shadow-2xl z-[60] transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-8 border-b border-white/10 flex justify-between items-start">
           <BrandLogo />
           {/* MOBILE CLOSE BUTTON */}

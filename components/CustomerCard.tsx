@@ -16,6 +16,15 @@ interface CustomerCardProps {
   onSettleAll: (customerId: string) => void;
 }
 
+function formatCurrencyShort(value: number) {
+  const sign = value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${sign}R$ ${((abs / 1e9).toFixed(1)).replace(/\.0$/,'').replace('.',',')}B`;
+  if (abs >= 1e6) return `${sign}R$ ${((abs / 1e6).toFixed(1)).replace(/\.0$/,'').replace('.',',')}M`;
+  if (abs >= 1e3) return `${sign}R$ ${((abs / 1e3).toFixed(1)).replace(/\.0$/,'').replace('.',',')}K`;
+  return `${sign}R$ ${abs.toLocaleString('pt-BR')}`;
+}
+
 const CustomerCard: React.FC<CustomerCardProps> = ({ 
   customer, onAddEntry, onDeleteEntry, onTogglePayment, 
   onPartialPayment, onDeleteCustomer, onPrintOrder, onDispatch,
@@ -56,18 +65,18 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
           <button onClick={() => onDeleteCustomer(customer.id)} className="p-2 text-white/20 hover:text-red-400 transition-all active:scale-90"><TrashIcon className="w-4 h-4"/></button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 relative z-10">
-          <div className="bg-white/10 p-3 rounded-2xl border border-white/10 backdrop-blur-sm">
+          <div className="grid grid-cols-2 gap-4 relative z-10">
+           <div className="bg-white/10 p-3 rounded-2xl border border-white/10 backdrop-blur-sm min-w-0 overflow-hidden">
              <p className="text-[8px] font-black uppercase text-white/60 mb-1">Carteira Digital</p>
-             <p className="text-sm font-black text-emerald-400 tabular-nums">{(customer.walletBalance || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</p>
-          </div>
-          <button onClick={() => onManageCredit(customer.id)} className="bg-white/10 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-left hover:bg-white/20 transition-all group/btn">
+             <p title={(customer.walletBalance || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} className="text-sm font-black text-emerald-400 tabular-nums whitespace-nowrap">{formatCurrencyShort(customer.walletBalance || 0)}</p>
+           </div>
+           <button onClick={() => onManageCredit(customer.id)} className="bg-white/10 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-left hover:bg-white/20 transition-all group/btn min-w-0 overflow-hidden">
              <p className="text-[8px] font-black uppercase text-white/60 mb-1 flex justify-between">Limite Crédito <EditIcon className="w-2 h-2 opacity-0 group-hover/btn:opacity-100 transition-opacity"/></p>
-             <p className={`text-sm font-black tabular-nums ${availableCredit < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
-                {availableCredit.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}
+             <p title={availableCredit.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} className={`text-sm font-black tabular-nums whitespace-nowrap ${availableCredit < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+               {formatCurrencyShort(availableCredit)}
              </p>
-          </button>
-        </div>
+           </button>
+          </div>
         
         {customer.creditLimit > 0 && (
           <div className="w-full bg-white/10 h-1 rounded-full mt-4 overflow-hidden">
@@ -119,9 +128,9 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
                             <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter tabular-nums">{e.weightKg.toFixed(1)} kg</span>
                          </div>
                       </td>
-                      <td className="py-4 text-right">
-                         <span className={`font-mono text-[11px] font-black tabular-nums ${e.isPaid ? 'text-emerald-600' : 'text-slate-900'}`}>{e.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
-                      </td>
+                       <td className="py-4 text-right">
+                         <span title={e.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} className={`font-mono text-[11px] font-black tabular-nums ${e.isPaid ? 'text-emerald-600' : 'text-slate-900'}`}>{formatCurrencyShort(e.total)}</span>
+                       </td>
                       <td className="py-4 px-6 text-right w-24">
                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             {!e.isPaid && <button onClick={() => onPartialPayment(customer.id, e.id)} title="Pagamento Parcial" className="w-7 h-7 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center font-black text-[10px] border border-amber-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 shadow-sm transition-all active:scale-90">$</button>}
@@ -138,10 +147,10 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
 
       <div className="p-6 bg-white border-t border-slate-50">
          <div className="flex gap-4 mb-4">
-            <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 shadow-inner flex items-center justify-between gap-4">
+                 <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 shadow-inner flex items-center justify-between gap-4">
                <div>
                  <p className="text-[8px] font-black text-slate-500 uppercase mb-1 tracking-widest">Total Pendente</p>
-                 <p className={`text-xs font-black font-mono tabular-nums ${totalPending > 0 ? 'text-red-600' : 'text-slate-500'}`}>{totalPending.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</p>
+                 <p title={totalPending.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} className={`text-xs font-black font-mono tabular-nums ${totalPending > 0 ? 'text-red-600' : 'text-slate-500'}`}>{formatCurrencyShort(totalPending)}</p>
                </div>
                <div className="flex-shrink-0">
                  {totalPending > 0 && (
