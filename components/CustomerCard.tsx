@@ -8,11 +8,12 @@ interface CustomerCardProps {
   onAddEntry: (customerId: string) => void;
   onDeleteEntry: (customerId: string, entryId: string) => void;
   onTogglePayment: (customerId: string, entryId: string) => void;
-  onPartialPayment: (customerId: string, entryId: string) => void;
+  onPartialPayment: (customerId: string, entryId?: string) => void;
   onDeleteCustomer: (customerId: string) => void;
   onPrintOrder: (entries: SaleEntry[]) => void;
   onDispatch: (customerId: string, entryIds: string[]) => void;
   onManageCredit: (customerId: string) => void;
+  onSettleAll: (customerId: string) => void;
 }
 
 const CustomerCard: React.FC<CustomerCardProps> = ({ 
@@ -40,7 +41,7 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
 
   // Filter entries from today for the "Quick Receipt" button
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayEntries = customer.entries.filter(e => e.date === todayStr);
+  const todayEntries = customer.entries.filter(e => e.date === todayStr && !e.isPaid);
 
   return (
     <div className="bg-white rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden flex flex-col h-full hover:shadow-[0_15px_45px_rgb(0,0,0,0.08)] transition-all duration-500 group relative">
@@ -103,9 +104,9 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto max-h-[200px] border-y border-slate-100 bg-slate-50/40 custom-scrollbar">
-         <table className="w-full text-left">
-            <tbody className="divide-y divide-slate-100">
-               {customer.entries.map((e) => {
+      <table className="w-full text-left">
+        <tbody className="divide-y divide-slate-100">
+          {customer.entries.filter(e => !e.isPaid).map((e) => {
                  const isSelected = selectedEntries.includes(e.id);
                  return (
                    <tr key={e.id} className={`transition-all ${isSelected ? 'bg-blue-50/80 shadow-inner' : 'hover:bg-white'} ${e.isDispatched ? 'opacity-40' : ''}`}>
@@ -137,16 +138,30 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
 
       <div className="p-6 bg-white border-t border-slate-50">
          <div className="flex gap-4 mb-4">
-            <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 shadow-inner">
-               <p className="text-[8px] font-black text-slate-500 uppercase mb-1 tracking-widest">Total Pendente</p>
-               <p className={`text-xs font-black font-mono tabular-nums ${totalPending > 0 ? 'text-red-600' : 'text-slate-500'}`}>{totalPending.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</p>
+            <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 shadow-inner flex items-center justify-between gap-4">
+               <div>
+                 <p className="text-[8px] font-black text-slate-500 uppercase mb-1 tracking-widest">Total Pendente</p>
+                 <p className={`text-xs font-black font-mono tabular-nums ${totalPending > 0 ? 'text-red-600' : 'text-slate-500'}`}>{totalPending.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</p>
+               </div>
+               <div className="flex-shrink-0">
+                 {totalPending > 0 && (
+                   <button onClick={() => onPartialPayment(customer.id)} title="Pagamento Parcial" className="px-3 py-2 bg-amber-50 text-amber-600 rounded-lg font-black text-[11px] uppercase tracking-wider border border-amber-200 hover:bg-amber-100 hover:text-amber-700 transition-all">ABATER</button>
+                 )}
+               </div>
             </div>
          </div>
-        <div className="flex gap-3">
-          <button onClick={() => onAddEntry(customer.id)} className="flex-1 bg-[#002855] text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl hover:bg-blue-900 active:scale-95 transition-all flex items-center justify-center gap-2 border border-white/5">
+        <div className="flex gap-2 items-center">
+          <button onClick={() => onAddEntry(customer.id)} className="flex-1 min-w-0 bg-[#002855] text-white font-black py-3 rounded-xl text-[9px] uppercase tracking-[0.12em] shadow-xl hover:shadow-2xl hover:bg-blue-900 active:scale-95 transition-all flex items-center justify-center gap-2 border border-white/5">
            <PlusIcon className="w-4 h-4 text-yellow-500" /> LANÇAR VENDA
           </button>
-          <button onClick={() => onDeleteCustomer(customer.id)} className="flex-shrink-0 px-4 py-4 bg-red-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.15em] hover:bg-red-700 transition-all">EXCLUIR</button>
+          <button onClick={() => onSettleAll(customer.id)} title="Quitar dívidas" className="flex-shrink-0 px-3 py-2 bg-emerald-600 text-white font-black rounded-xl text-[9px] uppercase tracking-[0.12em] hover:bg-emerald-700 transition-all flex items-center justify-center">
+            <CheckIcon className="w-4 h-4" />
+            <span className="sr-only">QUITAR</span>
+          </button>
+          <button onClick={() => onDeleteCustomer(customer.id)} title="Excluir cliente" className="flex-shrink-0 px-3 py-2 bg-red-600 text-white font-black rounded-xl text-[9px] uppercase tracking-[0.12em] hover:bg-red-700 transition-all flex items-center justify-center">
+            <TrashIcon className="w-4 h-4" />
+            <span className="sr-only">Excluir</span>
+          </button>
         </div>
       </div>
     </div>

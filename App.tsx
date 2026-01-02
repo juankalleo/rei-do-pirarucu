@@ -502,10 +502,15 @@ const App: React.FC = () => {
     setPayError(null);
 
     // Copy entries and sort outstanding by date (oldest first)
-    const outstanding = customer.entries
+    let outstanding = customer.entries
       .map(e => ({ ...e }))
       .filter(e => (e.total - (e.paidAmount || 0)) > 0)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // If a specific entry was targeted for partial payment, prioritize it first
+    if (activePartialEntryId) {
+      outstanding = outstanding.sort((a, b) => (a.id === activePartialEntryId ? -1 : b.id === activePartialEntryId ? 1 : 0));
+    }
 
     // If there's nothing outstanding, credit to wallet
     if (outstanding.length === 0) {
@@ -716,17 +721,29 @@ const App: React.FC = () => {
                     onDeleteCustomer={(id) => handleDeleteCustomer(id)}
                      onDeleteEntry={(cid, eid) => setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.filter(e => e.id !== eid) } : cust))}
                      onTogglePayment={(cid, eid) => setCustomers(prev => prev.map(cust => cust.id === cid ? { ...cust, entries: cust.entries.map(e => e.id === eid ? { ...e, isPaid: !e.isPaid } : e) } : cust))}
-                     onPartialPayment={(cid, eid) => {
-                        const cust = customers.find(x => x.id === cid);
-                        const ent = cust?.entries.find(e => e.id === eid);
-                        if (ent) {
-                           setActiveCustomerId(cid);
-                           setActivePartialEntryId(eid);
-                           setPayData({ ...payData, amount: (ent.total - (ent.paidAmount || 0)).toString() });
-                           setPayError(null);
-                           setIsDispatchModalOpen(true);
-                        }
-                     }}
+                    onPartialPayment={(cid, eid) => {
+                      const cust = customers.find(x => x.id === cid);
+                      if (!cust) return;
+                      if (eid) {
+                        const ent = cust.entries.find(e => e.id === eid);
+                        if (!ent) return;
+                        setActiveCustomerId(cid);
+                        setActivePartialEntryId(eid);
+                        setPayData({ ...payData, amount: (ent.total - (ent.paidAmount || 0)).toString() });
+                        setPayError(null);
+                        setIsDispatchModalOpen(true);
+                      } else {
+                        // Open modal for whole-customer partial payment (applies to oldest outstanding entries)
+                        const totalPaid = cust.entries.reduce((acc, e) => acc + (e.isPaid ? e.total : (e.paidAmount || 0)), 0);
+                        const totalDue = cust.entries.reduce((acc, e) => acc + e.total, 0);
+                        const totalPending = totalDue - totalPaid;
+                        setActiveCustomerId(cid);
+                        setActivePartialEntryId(null);
+                        setPayData({ ...payData, amount: totalPending.toString() });
+                        setPayError(null);
+                        setIsDispatchModalOpen(true);
+                      }
+                    }}
                      onPrintOrder={(ents) => { setOrderToPrint({ customer: c, entries: ents }); setTimeout(() => window.print(), 500); }}
                      onDispatch={(cid, eids) => {
                         const cust = customers.find(x => x.id === cid);
@@ -738,6 +755,20 @@ const App: React.FC = () => {
                            setPayError(null);
                            setIsDispatchModalOpen(true);
                         }
+                     }}
+                     onSettleAll={(cid) => {
+                        if (!window.confirm('Confirma quitar todas as dívidas pendentes deste cliente?')) return;
+                        const today = new Date().toISOString().split('T')[0];
+                        setCustomers(prev => prev.map(cust => {
+                          if (cust.id !== cid) return cust;
+                          const updated = cust.entries.map(e => {
+                            const pending = e.total - (e.paidAmount || 0);
+                            if (pending <= 0) return e;
+                            const newHist = [...(e.paymentHistory || []), { id: Date.now().toString() + Math.random().toString(36).slice(2,6), date: today, amount: pending, method: 'Quitar' }];
+                            return { ...e, paidAmount: (e.paidAmount || 0) + pending, isPaid: true, paidAt: today, paymentHistory: newHist };
+                          });
+                          return { ...cust, entries: updated };
+                        }));
                      }}
                      onManageCredit={(id) => { setActiveCustomerId(id); setIsCreditModalOpen(true); }}
                    />
@@ -1172,19 +1203,34 @@ const App: React.FC = () => {
                  </div>
                </header>
 
-               <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                 <div style={{ flex: 1, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
-                   <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Cliente</div>
-                   <div style={{ fontSize: 16, fontWeight: 800, color: '#0b2540', marginTop: 6 }}>{orderToPrint.customer.name}</div>
-                   <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>{orderToPrint.customer.address || ''}</div>
-                   <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>CPF/CNPJ: {orderToPrint.customer.taxId || '-'}</div>
-                 </div>
-                 <div style={{ width: 260, background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
-                   <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo</div>
-                   <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Itens: {orderToPrint.entries.length}</div>
-                   <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Total: {formatCurrency(orderToPrint.entries.reduce((a, b) => a + b.total, 0))}</div>
-                 </div>
-               </div>
+               {/* compute totals and abatements for print */}
+               {(() => {
+                 const total = orderToPrint.entries.reduce((a, b) => a + b.total, 0);
+                 // sum abatements from paymentHistory across entries; fallback to paidAmount
+                 const abatements = orderToPrint.entries.reduce((sum, e) => {
+                   const histSum = (e.paymentHistory || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+                   const paidAmt = (e.paidAmount && (histSum === 0)) ? Number(e.paidAmount || 0) : 0;
+                   return sum + histSum + paidAmt;
+                 }, 0);
+                 const net = Math.max(0, total - abatements);
+                 return (
+                   <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                     <div style={{ flex: 1, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                       <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Cliente</div>
+                       <div style={{ fontSize: 16, fontWeight: 800, color: '#0b2540', marginTop: 6 }}>{orderToPrint.customer.name}</div>
+                       <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>{orderToPrint.customer.address || ''}</div>
+                       <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>CPF/CNPJ: {orderToPrint.customer.taxId || '-'}</div>
+                     </div>
+                     <div style={{ width: 320, background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #e6eef8' }}>
+                       <div style={{ fontSize: 9, fontWeight: 800, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo</div>
+                       <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Itens: {orderToPrint.entries.length}</div>
+                       <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Total Bruto: {formatCurrency(total)}</div>
+                       <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700 }}>Abatimentos: {formatCurrency(abatements)}</div>
+                       <div style={{ marginTop: 6, fontSize: 15, fontWeight: 900 }}>Total a Pagar: {formatCurrency(net)}</div>
+                     </div>
+                   </div>
+                 );
+               })()}
 
                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 18 }}>
                  <thead>
@@ -1217,8 +1263,45 @@ const App: React.FC = () => {
                    </div>
                  </div>
                  <div style={{ width: 320, textAlign: 'right' }}>
-                   <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>TOTAL DO PEDIDO</div>
-                   <div style={{ fontSize: 28, fontWeight: 900 }}>{formatCurrency(orderToPrint.entries.reduce((a, b) => a + b.total, 0))}</div>
+                   {(() => {
+                     const total = orderToPrint.entries.reduce((a, b) => a + b.total, 0);
+                     const abatements = orderToPrint.entries.reduce((sum, e) => {
+                       const histSum = (e.paymentHistory || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+                       const paidAmt = (e.paidAmount && (histSum === 0)) ? Number(e.paidAmount || 0) : 0;
+                       return sum + histSum + paidAmt;
+                     }, 0);
+                     const net = Math.max(0, total - abatements);
+                     const payments = orderToPrint.entries.flatMap(e => (e.paymentHistory || []).map(ph => ({...ph, product: e.productName}))).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                     return (
+                       <>
+                         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>TOTAL BRUTO</div>
+                         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>{formatCurrency(total)}</div>
+                         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Abatimentos</div>
+                         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>{formatCurrency(abatements)}</div>
+                         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Total a Pagar</div>
+                         <div style={{ fontSize: 28, fontWeight: 900 }}>{formatCurrency(net)}</div>
+
+                         <div style={{ marginTop: 12, textAlign: 'left' }}>
+                           <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Histórico de Abatimentos</div>
+                           {payments.length === 0 ? (
+                             <div style={{ fontSize: 12, color: '#6b7280' }}>Nenhum abatimento registrado</div>
+                           ) : (
+                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                               <tbody>
+                                 {payments.map((ph, idx) => (
+                                   <tr key={idx}>
+                                     <td style={{ padding: '4px 6px', verticalAlign: 'top', width: 110 }}>{new Date(ph.date).toLocaleDateString()}</td>
+                                     <td style={{ padding: '4px 6px', verticalAlign: 'top' }}>{ph.product}</td>
+                                     <td style={{ padding: '4px 6px', verticalAlign: 'top', textAlign: 'right' }}>{formatCurrency(ph.amount)}</td>
+                                   </tr>
+                                 ))}
+                               </tbody>
+                             </table>
+                           )}
+                         </div>
+                       </>
+                     );
+                   })()}
                  </div>
                </div>
 
