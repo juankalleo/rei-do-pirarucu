@@ -112,8 +112,8 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto max-h-[200px] border-y border-slate-100 bg-slate-50/40 custom-scrollbar">
-      <table className="w-full text-left">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden max-h-[200px] border-y border-slate-100 bg-slate-50/40 custom-scrollbar">
+      <table className="w-full text-left table-fixed">
         <tbody className="divide-y divide-slate-100">
           {customer.entries.filter(e => !e.isPaid).map((e) => {
                  const isSelected = selectedEntries.includes(e.id);
@@ -124,13 +124,13 @@ const CustomerCard: React.FC<CustomerCardProps> = ({
                       </td>
                       <td className="py-4">
                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-[#002855] leading-none mb-1">{e.productName}</span>
+                            <span className="text-[10px] font-black uppercase text-[#002855] leading-none mb-1 break-words whitespace-normal">{e.productName}</span>
                             <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter tabular-nums">{e.weightKg.toFixed(1)} kg</span>
                          </div>
                       </td>
-                       <td className="py-4 text-right">
-                         <span title={e.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} className={`font-mono text-[11px] font-black tabular-nums ${e.isPaid ? 'text-emerald-600' : 'text-slate-900'}`}>{formatCurrencyShort(e.total)}</span>
-                       </td>
+                  <td className="py-4 text-right w-28">
+                    <span title={e.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} className={`font-mono text-[11px] font-black tabular-nums block truncate ${e.isPaid ? 'text-emerald-600' : 'text-slate-900'}`}>{formatCurrencyShort(e.total)}</span>
+                  </td>
                       <td className="py-4 px-6 text-right w-24">
                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             {!e.isPaid && <button onClick={() => onPartialPayment(customer.id, e.id)} title="Pagamento Parcial" className="w-7 h-7 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center font-black text-[10px] border border-amber-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 shadow-sm transition-all active:scale-90">$</button>}

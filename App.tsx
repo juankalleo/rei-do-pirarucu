@@ -140,7 +140,199 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // --- Supabase persistence helpers ---
+  const persistCustomer = async (cust: Customer) => {
+    try {
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        const key = `customers:${cust.id}`;
+        addPending(key);
+        const payload = {
+          id: cust.id,
+          name: cust.name,
+          tax_id: cust.taxId || null,
+          phone: cust.phone || null,
+          address: cust.address || null,
+          wallet_balance: cust.walletBalance || 0,
+          credit_limit: cust.creditLimit || 0,
+          price_list: cust.priceList || {}
+        };
+        const { error } = await supabase.from('customers').upsert([payload]);
+        removePending(key);
+        if (error) console.error('Erro ao persistir cliente no Supabase:', error);
+      }
+    } catch (err) {
+      console.error('persistCustomer error:', err);
+    }
+  };
+
+  const persistSale = async (custId: string | null, sale: SaleEntry) => {
+    try {
+      if (!custId) return;
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        const key = `sales:${sale.id}`;
+        addPending(key);
+        const payload: any = {
+          id: sale.id,
+          customer_id: custId,
+          product_name: sale.productName,
+          weight_kg: sale.weightKg,
+          price_per_kg: sale.pricePerKg,
+          total: sale.total,
+          date: sale.date,
+          is_paid: sale.isPaid || false,
+          paid_amount: sale.paidAmount || 0,
+          paid_at: sale.paidAt || null,
+          payment_history: sale.paymentHistory ? JSON.stringify(sale.paymentHistory) : null
+        };
+        const { error } = await supabase.from('sales').upsert([payload]);
+        removePending(key);
+        if (error) console.error('Erro ao persistir venda no Supabase:', error);
+      }
+    } catch (err) {
+      console.error('persistSale error:', err);
+    }
+  };
+
+  const persistPurchase = async (purchase: PurchaseEntry) => {
+    try {
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        const key = `purchases:${purchase.id}`;
+        addPending(key);
+        const { error } = await supabase.from('purchases').upsert([{
+          id: purchase.id,
+          product_name: purchase.productName,
+          weight_kg: purchase.weightKg,
+          price_per_kg: purchase.pricePerKg,
+          total: purchase.total,
+          date: purchase.date,
+          supplier: purchase.supplier || null
+        }]);
+        removePending(key);
+        if (error) console.error('Erro ao persistir compra no Supabase:', error);
+      }
+    } catch (err) {
+      console.error('persistPurchase error:', err);
+    }
+  };
+
+  const persistNewPayments = async (payments: any[]) => {
+    try {
+      if (!payments.length) return;
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        payments.forEach(p => addPending(`payment_records:${p.id}`));
+        const { error } = await supabase.from('payment_records').insert(payments);
+        payments.forEach(p => removePending(`payment_records:${p.id}`));
+        if (error) console.error('Erro ao persistir payment_records:', error);
+      }
+    } catch (err) {
+      console.error('persistNewPayments error:', err);
+    }
+  };
+
+  // client instance id for loop-avoidance debugging (not stored in DB)
+  const clientInstanceId = React.useMemo(() => Math.random().toString(36).slice(2, 9), []);
+  const pendingOps = React.useRef(new Set<string>());
+  const addPending = (key: string) => { pendingOps.current.add(key); setTimeout(() => pendingOps.current.delete(key), 5000); };
+  const removePending = (key: string) => { pendingOps.current.delete(key); };
+
+
+
   const SERVICE_ITEMS = ['FRETE', 'CAIXA', 'DEPOSITO'];
+
+  // Realtime subscriptions with loop-avoidance
+  useEffect(() => {
+    if (!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)) return;
+    const channels: any[] = [];
+    try {
+      const tables = ['customers', 'sales', 'purchases', 'stock', 'payment_records'];
+      tables.forEach(tbl => {
+        const ch = supabase.channel(`public:${tbl}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, (payload) => {
+            const ev = payload.eventType; // INSERT, UPDATE, DELETE
+            const record = payload.new || payload.old;
+            if (!record) return;
+            const key = `${tbl}:${record.id}`;
+            if (pendingOps.current.has(key)) {
+              // This event was caused by this client; ignore to avoid loops
+              removePending(key);
+              return;
+            }
+            // Apply changes to local state
+            if (tbl === 'purchases') {
+              if (ev === 'INSERT') {
+                const entry: PurchaseEntry = {
+                  id: record.id,
+                  productName: record.product_name,
+                  weightKg: Number(record.weight_kg) || 0,
+                  pricePerKg: Number(record.price_per_kg) || 0,
+                  total: Number(record.total) || 0,
+                  date: record.date ? (typeof record.date === 'string' ? record.date : new Date(record.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+                  supplier: record.supplier || ''
+                };
+                setPurchases(prev => prev.some(p => p.id === entry.id) ? prev : [entry, ...prev]);
+              } else if (ev === 'UPDATE') {
+                setPurchases(prev => prev.map(p => p.id === record.id ? ({ ...p, productName: record.product_name, weightKg: Number(record.weight_kg) || 0, pricePerKg: Number(record.price_per_kg) || 0, total: Number(record.total) || 0, date: record.date, supplier: record.supplier }) : p));
+              } else if (ev === 'DELETE') {
+                setPurchases(prev => prev.filter(p => p.id !== record.id));
+              }
+            }
+
+            if (tbl === 'customers') {
+              if (ev === 'INSERT' || ev === 'UPDATE') {
+                setCustomers(prev => {
+                  const mapped: Customer = { id: record.id, name: record.name || 'SEM NOME', taxId: record.tax_id || '', address: record.address || '', contactPerson: '', phone: record.phone || '', priceList: record.price_list || {}, entries: [], walletBalance: Number(record.wallet_balance) || 0, creditLimit: Number(record.credit_limit) || 0 };
+                  const exists = prev.some(c => c.id === record.id);
+                  if (exists) {
+                    return prev.map(c => c.id === record.id ? { ...c, name: record.name || c.name, taxId: record.tax_id || c.taxId, phone: record.phone || c.phone, address: record.address || c.address, walletBalance: Number(record.wallet_balance) || c.walletBalance, creditLimit: Number(record.credit_limit) || c.creditLimit } : c);
+                  }
+                  return [mapped, ...prev];
+                });
+              } else if (ev === 'DELETE') {
+                setCustomers(prev => prev.filter(c => c.id !== record.id));
+              }
+            }
+
+            if (tbl === 'sales') {
+              if (ev === 'INSERT') {
+                // Map and add to corresponding customer's entries
+                const sale: SaleEntry = { id: record.id, productName: record.product_name, weightKg: Number(record.weight_kg)||0, pricePerKg: Number(record.price_per_kg)||0, total: Number(record.total)||0, date: record.date ? (typeof record.date === 'string' ? record.date : new Date(record.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0], isPaid: !!record.is_paid, paidAt: record.paid_at || undefined, paidAmount: Number(record.paid_amount) || undefined, paymentHistory: record.payment_history ? JSON.parse(record.payment_history) : [] };
+                setCustomers(prev => prev.map(c => c.id === record.customer_id ? { ...c, entries: [sale, ...c.entries] } : c));
+              } else if (ev === 'UPDATE') {
+                setCustomers(prev => prev.map(c => ({ ...c, entries: c.entries.map(e => e.id === record.id ? { ...e, productName: record.product_name, weightKg: Number(record.weight_kg)||0, pricePerKg: Number(record.price_per_kg)||0, total: Number(record.total)||0, date: record.date, isPaid: !!record.is_paid, paidAt: record.paid_at || e.paidAt, paidAmount: Number(record.paid_amount) || e.paidAmount, paymentHistory: record.payment_history ? JSON.parse(record.payment_history) : e.paymentHistory } : e) })));
+              } else if (ev === 'DELETE') {
+                setCustomers(prev => prev.map(c => ({ ...c, entries: c.entries.filter(e => e.id !== record.id) })));
+              }
+            }
+
+            if (tbl === 'stock') {
+              if (ev === 'INSERT' || ev === 'UPDATE') {
+                const mapped: StockItem = { productName: record.product_name, availableWeight: Number(record.available_weight)||0, basePricePerKg: Number(record.base_price_per_kg)||0, lastUpdate: record.last_update || new Date().toISOString(), history: record.history ? JSON.parse(record.history) : [] };
+                setStock(prev => prev.some(s => s.productName === mapped.productName) ? prev.map(s => s.productName === mapped.productName ? mapped : s) : [mapped, ...prev]);
+              } else if (ev === 'DELETE') {
+                setStock(prev => prev.filter(s => s.productName !== record.product_name));
+              }
+            }
+
+            if (tbl === 'payment_records') {
+              // Payments affect sales entries — full reconciliation performed on sales UPDATE events
+              // For INSERT, attempt to apply to matching sale in-memory
+              if (ev === 'INSERT') {
+                const pr = record;
+                setCustomers(prev => prev.map(c => ({ ...c, entries: c.entries.map(e => e.id === pr.sale_id ? { ...e, paidAmount: (e.paidAmount || 0) + Number(pr.amount), paymentHistory: [...(e.paymentHistory||[]), { id: pr.id, date: pr.date, amount: Number(pr.amount), method: pr.method }], isPaid: ((e.paidAmount || 0) + Number(pr.amount)) >= e.total - 0.01 } : e) })));
+              }
+            }
+          })
+          .subscribe();
+        channels.push(ch);
+      });
+    } catch (err) {
+      console.error('Erro ao configurar realtime subscriptions:', err);
+    }
+
+    return () => {
+      try { channels.forEach(ch => ch.unsubscribe && ch.unsubscribe()); } catch (err) {}
+    };
+  }, [customers, stock]);
 
   const [isVendaModalOpen, setIsVendaModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -311,6 +503,28 @@ const App: React.FC = () => {
         isPaid: false
       };
       setCustomers(prev => prev.map(c => c.id === activeCustomerId ? { ...c, entries: [newSale, ...c.entries] } : c));
+      // persist sale and stock update (best-effort)
+      (async () => {
+        try {
+          await persistSale(activeCustomerId, newSale);
+          if (!SERVICE_ITEMS.includes(pName)) {
+            const item = stock.find(s => s.productName === pName);
+            if (item) {
+                const stockKey = `stock:${item.productName}`;
+                addPending(stockKey);
+                const { error } = await supabase.from('stock').upsert([{
+                  product_name: item.productName,
+                  available_weight: +(item.availableWeight - weight).toFixed(3),
+                  base_price_per_kg: item.basePricePerKg,
+                  last_update: new Date().toISOString(),
+                  history: JSON.stringify([{ id: Date.now().toString(), type: 'exit', weight: -weight, date: formData.date, description: `Venda p/ ${customer.name}` }, ...(item.history || [])])
+                }]);
+                removePending(stockKey);
+                if (error) console.error('Erro ao persistir atualização de estoque após venda:', error);
+            }
+          }
+        } catch (err) { console.error('persist sale error:', err); }
+      })();
       setIsVendaModalOpen(false);
       setLastSale({ customer, sale: newSale });
       setIsSuccessModalOpen(true);
@@ -334,6 +548,8 @@ const App: React.FC = () => {
       creditLimit: 0
     };
     setCustomers(prev => [newCust, ...prev]);
+    // persist to Supabase (best-effort)
+    (async () => { await persistCustomer(newCust); })();
     setIsCustomerModalOpen(false);
     setCustomerFormData({ name: '', taxId: '', phone: '', address: '' });
   };
@@ -352,6 +568,24 @@ const App: React.FC = () => {
       history: weight > 0 ? [{ id: Date.now().toString(), type: 'adjustment', weight, date: new Date().toISOString(), description: 'Cadastro Inicial' }] : []
     };
     setStock(prev => [newItem, ...prev]);
+    // persist stock item to Supabase (if table exists)
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          const stockKey = `stock:${newItem.productName}`;
+          addPending(stockKey);
+          const { error } = await supabase.from('stock').upsert([{
+            product_name: newItem.productName,
+            available_weight: newItem.availableWeight,
+            base_price_per_kg: newItem.basePricePerKg,
+            last_update: newItem.lastUpdate,
+            history: JSON.stringify(newItem.history || [])
+          }]);
+          removePending(stockKey);
+          if (error) console.error('Erro ao persistir estoque no Supabase:', error);
+        }
+      } catch (err) { console.error('persist stock error:', err); }
+    })();
     setIsNewProductModalOpen(false);
     setNewProductFormData({ name: '', weight: '', price: '' });
   };
@@ -371,6 +605,23 @@ const App: React.FC = () => {
       }
       return s;
     }));
+    // persist stock update
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          const name = stockFormData.name;
+          const item = stock.find(s => s.productName === name);
+          const toUpsert = item ? { product_name: item.productName, available_weight: item.availableWeight, base_price_per_kg: item.basePricePerKg, last_update: item.lastUpdate, history: JSON.stringify(item.history || []) } : null;
+          if (toUpsert) {
+            const stockKey = `stock:${toUpsert.product_name}`;
+            addPending(stockKey);
+            const { error } = await supabase.from('stock').upsert([toUpsert]);
+            removePending(stockKey);
+            if (error) console.error('Erro ao persistir ajuste de estoque:', error);
+          }
+        }
+      } catch (err) { console.error('persist stock update error:', err); }
+    })();
     setIsStockModalOpen(false);
   };
 
@@ -386,27 +637,8 @@ const App: React.FC = () => {
     setPurchases(prev => [newPurchase, ...prev]);
 
     // Try to persist to Supabase if configured; do not change stock here (business rule)
-    (async () => {
-      try {
-        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-          const { error } = await supabase.from('purchases').insert([{ 
-            id: newPurchase.id,
-            product_name: newPurchase.productName,
-            weight_kg: newPurchase.weightKg,
-            price_per_kg: newPurchase.pricePerKg,
-            total: newPurchase.total,
-            date: newPurchase.date,
-            supplier: newPurchase.supplier
-          }]);
-          if (error) {
-            console.error('Erro ao salvar compra no Supabase:', error);
-            // keep local fallback; optionally notify user
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao persistir compra:', err);
-      }
-    })();
+    // persist purchase (best-effort)
+    (async () => { await persistPurchase(newPurchase); })();
     // prepare printable purchase order
     setPurchaseToPrint(newPurchase);
     setTimeout(() => window.print(), 600);
@@ -454,6 +686,23 @@ const App: React.FC = () => {
       } catch (err) {
         console.error('Erro ao deletar cliente remotamente:', err);
       }
+    })();
+  };
+
+  const handleDeleteStock = (productName: string) => {
+    if (!window.confirm(`Deseja remover o produto "${productName}" do estoque? Esta ação é irreversível.`)) return;
+    setStock(prev => prev.filter(s => s.productName !== productName));
+    // attempt remote delete (best-effort)
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          const key = `stock:${productName}`;
+          addPending(key);
+          const { error } = await supabase.from('stock').delete().eq('product_name', productName);
+          removePending(key);
+          if (error) console.error('Erro ao deletar produto no Supabase:', error);
+        }
+      } catch (err) { console.error('delete stock error:', err); }
     })();
   };
 
@@ -512,6 +761,7 @@ const App: React.FC = () => {
 
     let remaining = amount;
     const updatedEntries = customer.entries.map(ent => ({ ...ent }));
+    const newPayments: any[] = [];
 
     for (const ent of outstanding) {
       if (remaining <= 0) break;
@@ -523,13 +773,15 @@ const App: React.FC = () => {
       if (idx >= 0) {
         const newPaid = (updatedEntries[idx].paidAmount || 0) + payNow;
         const isFullyPaid = newPaid >= updatedEntries[idx].total - 0.01;
+        const paymentRecord = { id: Date.now().toString() + Math.random().toString(36).slice(2,6), date: payData.date, amount: payNow, method: payData.method };
         updatedEntries[idx] = {
           ...updatedEntries[idx],
           paidAmount: newPaid,
           isPaid: isFullyPaid,
           paidAt: isFullyPaid ? payData.date : updatedEntries[idx].paidAt,
-          paymentHistory: [...(updatedEntries[idx].paymentHistory || []), { id: Date.now().toString() + Math.random().toString(36).slice(2,6), date: payData.date, amount: payNow, method: payData.method }]
+          paymentHistory: [...(updatedEntries[idx].paymentHistory || []), paymentRecord]
         };
+        newPayments.push({ id: paymentRecord.id, sale_id: updatedEntries[idx].id, date: paymentRecord.date, amount: paymentRecord.amount, method: paymentRecord.method });
       }
     }
 
@@ -540,8 +792,49 @@ const App: React.FC = () => {
       walletBalance: (c.walletBalance || 0) + (remaining > 0 ? remaining : 0)
     } : c));
 
+    // persist updated sales and new payment records (best-effort)
+    (async () => {
+      try {
+        if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          // upsert affected sales
+          for (const ent of updatedEntries) {
+            await persistSale(activeCustomerId, ent);
+          }
+          // insert payment records
+          if (newPayments.length) await persistNewPayments(newPayments);
+        }
+      } catch (err) { console.error('Erro ao persistir pagamentos:', err); }
+    })();
+
     setIsDispatchModalOpen(false);
     setActivePartialEntryId(null);
+  };
+
+  const handleSettleAll = (cid: string) => {
+    if (!window.confirm('Confirma quitar todas as dívidas pendentes deste cliente?')) return;
+    const today = new Date().toISOString().split('T')[0];
+    const newPaymentRecords: any[] = [];
+    setCustomers(prev => prev.map(cust => {
+      if (cust.id !== cid) return cust;
+      const updated = cust.entries.map(e => {
+        const pending = e.total - (e.paidAmount || 0);
+        if (pending <= 0) return e;
+        const paymentId = Date.now().toString() + Math.random().toString(36).slice(2,6);
+        newPaymentRecords.push({ id: paymentId, sale_id: e.id, date: today, amount: pending, method: 'Quitar' });
+        const newHist = [...(e.paymentHistory || []), { id: paymentId, date: today, amount: pending, method: 'Quitar' }];
+        return { ...e, paidAmount: (e.paidAmount || 0) + pending, isPaid: true, paidAt: today, paymentHistory: newHist };
+      });
+      // persist updated sales and payment records
+      (async () => {
+        try {
+          if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+            for (const ent of updated) await persistSale(cid, ent);
+            if (newPaymentRecords.length) await persistNewPayments(newPaymentRecords);
+          }
+        } catch (err) { console.error('Erro ao persistir quitar:', err); }
+      })();
+      return { ...cust, entries: updated };
+    }));
   };
 
   const navigateTo = (view: ViewType) => {
@@ -677,7 +970,10 @@ const App: React.FC = () => {
                            <h4 className={`text-[9px] font-black uppercase tracking-widest leading-none flex-1 min-w-0 truncate pr-2 ${isOutOfStock ? 'text-red-400' : 'text-emerald-400'}`}>
                               {item.productName}
                            </h4>
-                           <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="p-2 hover:bg-white/50 rounded-lg shrink-0"><EditIcon className="w-4 h-4 text-[#002855]"/></button>
+                           <div className="flex items-center gap-2">
+                             <button onClick={() => { setStockFormData({ name: item.productName, weight: item.availableWeight.toString(), price: item.basePricePerKg.toString() }); setIsStockModalOpen(true); }} className="p-2 hover:bg-white/50 rounded-lg shrink-0"><EditIcon className="w-4 h-4 text-[#002855]"/></button>
+                             <button onClick={() => handleDeleteStock(item.productName)} title="Remover produto" className="p-2 hover:bg-white/50 rounded-lg shrink-0 text-red-500"><TrashIcon className="w-4 h-4"/></button>
+                           </div>
                         </div>
                         <div className="min-w-0">
                            <p className={`text-4xl font-black tabular-nums truncate ${isOutOfStock ? 'text-red-600' : 'text-emerald-600'}`}>
@@ -703,7 +999,7 @@ const App: React.FC = () => {
                  <h3 className="text-2xl font-black text-[#002855] italic">Painel de Clientes</h3>
                  <button onClick={() => setIsCustomerModalOpen(true)} className="w-full sm:w-auto bg-[#002855] text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:bg-blue-900 transition-all active:scale-95"><PlusIcon className="w-4 h-4" /> CADASTRAR CLIENTE</button>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
                  {customers.map(c => (
                    <CustomerCard 
                      key={c.id} customer={c} 
@@ -746,20 +1042,7 @@ const App: React.FC = () => {
                            setIsDispatchModalOpen(true);
                         }
                      }}
-                     onSettleAll={(cid) => {
-                        if (!window.confirm('Confirma quitar todas as dívidas pendentes deste cliente?')) return;
-                        const today = new Date().toISOString().split('T')[0];
-                        setCustomers(prev => prev.map(cust => {
-                          if (cust.id !== cid) return cust;
-                          const updated = cust.entries.map(e => {
-                            const pending = e.total - (e.paidAmount || 0);
-                            if (pending <= 0) return e;
-                            const newHist = [...(e.paymentHistory || []), { id: Date.now().toString() + Math.random().toString(36).slice(2,6), date: today, amount: pending, method: 'Quitar' }];
-                            return { ...e, paidAmount: (e.paidAmount || 0) + pending, isPaid: true, paidAt: today, paymentHistory: newHist };
-                          });
-                          return { ...cust, entries: updated };
-                        }));
-                     }}
+                     onSettleAll={(cid) => handleSettleAll(cid)}
                      onManageCredit={(id) => { setActiveCustomerId(id); setIsCreditModalOpen(true); }}
                    />
                  ))}
